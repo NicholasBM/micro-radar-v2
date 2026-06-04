@@ -1,38 +1,55 @@
 #include <Arduino.h>
 #include <WiFiManager.h>
+#include <cmath>
 
 #include "LGFX.h"
+#include "WiFiManagerHelpers.h"
 
 #define SCREEN_SIZE 240
 
 LGFX tft;
+LGFX_Sprite backbuffer(&tft);
 WiFiManager wm;
 
 void setup()
 {
   Serial.begin(115200);
-  delay(1000);
+  // delay(1000); // avoids immediate serial output being cut off - uncomment if needed
 
+  // initialise LGFX + screen
   tft.init();
   tft.invertDisplay(true);
   pinMode(3, OUTPUT);
   digitalWrite(3, HIGH);
 
-  tft.fillScreen(lgfx::color888(0, 0, 0));
+  backbuffer.createSprite(SCREEN_SIZE, SCREEN_SIZE);
 
+  // establish WiFi connection
+  tft.fillScreen(lgfx::color888(0, 0, 0));
   tft.setTextColor(lgfx::color888(0, 255, 0));
   tft.drawCentreString("Connecting to WiFi...", SCREEN_SIZE / 2, SCREEN_SIZE / 2);
 
-  wm.autoConnect("FlightRadar-Setup");
+  WiFiManagerHelpers::ConfigureWiFiManager(wm);
+  wm.autoConnect(WiFiManagerHelpers::WiFiManagerName);
 }
 
 void loop()
 {
-  tft.fillScreen(lgfx::color888(0, 0, 0));
-  tft.fillCircle(120, 120, 110, lgfx::color888(0, 255, 0));
-  tft.fillCircle(120, 120, 60, lgfx::color888(255, 0, 0));
-  tft.fillCircle(120, 120, 30, lgfx::color888(0, 0, 255));
+  // TEMP: draw example graphics
+  backbuffer.fillScreen(lgfx::color888(0, 0, 0)); // clear buffer
 
-  tft.setTextColor(lgfx::color888(255, 255, 255));
-  tft.drawCentreString("Hello, world!", SCREEN_SIZE / 2, SCREEN_SIZE / 2);
+  backbuffer.fillCircle(120, 120, 110, lgfx::color888(0, 255, 0));
+  backbuffer.fillCircle(120, 120, 60, lgfx::color888(255, 0, 0));
+  backbuffer.fillCircle(120, 120, 30, lgfx::color888(0, 0, 255));
+
+  backbuffer.setTextColor(lgfx::color888(255, 255, 255));
+  float freq = millis() / 1000.0f,
+    mag = 40.0f;
+  backbuffer.drawCentreString(
+    "Hello, world!",
+    SCREEN_SIZE / 2 + (std::sin(freq) * mag),
+    SCREEN_SIZE / 2 + (std::cos(freq) * mag)
+  );
+
+  backbuffer.pushSprite(0, 0); // present
 }
