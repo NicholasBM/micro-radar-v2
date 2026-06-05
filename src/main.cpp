@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <WiFiManager.h>
 #include <cmath>
 
@@ -6,6 +7,7 @@
 #include "WiFiManagerHelpers.h"
 #include "ConfigurationWebServer.h"
 #include "HttpRequestManager.h"
+#include "models/Aircraft.h"
 
 #define SCREEN_SIZE 240
 
@@ -41,8 +43,24 @@ void setup()
   configServer.Initialise();
 
   // test request
-  String response = http.Get("https://webhook.site/733f63c6-73d1-4d5b-8c51-b3877fbbd595");
+  String response = http.Get(
+    "https://opensky-network.org/api/states/all",
+    {
+      {"lomin", String(-0.320663 - 1.0)},
+      {"lomax", String(-0.320663 + 1.0)},
+      {"lamin", String(51.454863 - 1.0)},
+      {"lamax", String(51.454863 + 1.0)}
+    }
+  );
   Serial.println(response);
+
+  JsonDocument doc;
+  deserializeJson(doc, response);
+  auto aircraft = JsonParser::ParseArray<Aircraft>(doc["states"].as<JsonArray>());
+
+  for (auto& ac : aircraft) {
+    Serial.println(ac.toString());
+  }
 }
 
 void loop()

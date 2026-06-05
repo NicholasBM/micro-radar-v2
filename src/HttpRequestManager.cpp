@@ -5,9 +5,10 @@
 String HttpRequestManager::PrepareQueryParameters(std::vector<std::pair<String, String>>& params)
 {
     if (params.empty())
-        return {};
+        return "";
 
-    std::stringstream queryStream("?");
+    std::stringstream queryStream;
+    queryStream << "?";
 
     bool first = true;
     for (const auto& [key, value] : params)
@@ -15,7 +16,7 @@ String HttpRequestManager::PrepareQueryParameters(std::vector<std::pair<String, 
         if (!first)
             queryStream << "&";
 
-        queryStream << key << "=" << value;
+        queryStream << key.c_str() << "=" << value.c_str();
         first = false;
     }
 
@@ -23,15 +24,16 @@ String HttpRequestManager::PrepareQueryParameters(std::vector<std::pair<String, 
 }
 
 String HttpRequestManager::Get(String url, std::vector<std::pair<String, String>> params, std::pair<String, String> basicAuthentication) {
-    http.begin(url);
+    String queryParams = PrepareQueryParameters(params); // create query params string
 
-    // Use basic authentication if provided
+    http.begin(url + queryParams);
+
+    // use basic authentication if provided
     if (basicAuthentication.first.length() && basicAuthentication.second.length()) {
         http.setAuthorization(basicAuthentication.first.c_str(), basicAuthentication.second.c_str());
     }
 
-    // todo: query params, connect to opensky
-
+    // send request and handle response 
     int responseCode = http.GET();
     String response = "";
 
