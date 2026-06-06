@@ -7,6 +7,7 @@
 #include "WiFiManagerHelpers.h"
 #include "ConfigurationWebServer.h"
 #include "HttpRequestManager.h"
+#include "OpenSkyAuthTokenHandler.h"
 #include "models/Aircraft.h"
 
 #define SCREEN_SIZE 240
@@ -17,6 +18,7 @@ LGFX_Sprite backbuffer(&tft);
 WiFiManager wm;
 ConfigurationWebServer configServer;
 HttpRequestManager http;
+OpenSkyAuthTokenHandler authHandler(&http);
 
 void setup()
 {
@@ -29,6 +31,7 @@ void setup()
   pinMode(3, OUTPUT);
   digitalWrite(3, HIGH);
 
+  backbuffer.setColorDepth(8);
   backbuffer.createSprite(SCREEN_SIZE, SCREEN_SIZE);
 
   // establish WiFi connection
@@ -42,24 +45,35 @@ void setup()
   // begin background server for configuration
   configServer.Initialise();
 
-  // test request
-  String response = http.Get(
+  // test opensky request
+  String token = authHandler.GetValidToken(
+    configServer.GetStoredString("opensky-id"),
+    configServer.GetStoredString("opensky-secret")
+  );
+
+  std::vector<std::pair<String, String>> headers = {};
+  if (!token.isEmpty()) {
+    Serial.println("Token available - adding auth header");
+    headers.push_back({ "Authorization", "Bearer " + token });
+  }
+  String airplaneStateResponse = http.Get(
     "https://opensky-network.org/api/states/all",
     {
-      {"lomin", String(-0.320663 - 1.0)},
-      {"lomax", String(-0.320663 + 1.0)},
-      {"lamin", String(51.454863 - 1.0)},
-      {"lamax", String(51.454863 + 1.0)}
-    }
+      {"lomin", String(-0.320663 - 0.3)},
+      {"lomax", String(-0.320663 + 0.3)},
+      {"lamin", String(51.454863 - 0.3)},
+      {"lamax", String(51.454863 + 0.3)}
+    },
+    headers
   );
-  Serial.println(response);
+  Serial.println(airplaneStateResponse);
 
   JsonDocument doc;
-  deserializeJson(doc, response);
-  auto aircraft = JsonParser::ParseArray<Aircraft>(doc["states"].as<JsonArray>());
+  deserializeJson(doc, airplaneStateResponse);
+  auto aircraft = JsonParser::ParseArray<Aircraft>(doc["states"]);
 
   for (auto& ac : aircraft) {
-    Serial.println(ac.toString());
+    Serial.println(ac.callsign + " from " + ac.originCountry + (ac.onGround ? " (Grounded)" : ""));
   }
 }
 

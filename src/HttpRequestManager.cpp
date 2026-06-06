@@ -2,7 +2,7 @@
 
 #include <sstream>
 
-String HttpRequestManager::PrepareQueryParameters(std::vector<std::pair<String, String>>& params)
+String HttpRequestManager::BuildQueryString(std::vector<std::pair<String, String>>& params)
 {
     if (params.empty())
         return "";
@@ -23,18 +23,45 @@ String HttpRequestManager::PrepareQueryParameters(std::vector<std::pair<String, 
     return queryStream.str().c_str();
 }
 
-String HttpRequestManager::Get(String url, std::vector<std::pair<String, String>> params, std::pair<String, String> basicAuthentication) {
-    String queryParams = PrepareQueryParameters(params); // create query params string
+String HttpRequestManager::Get(String url, std::vector<std::pair<String, String>> params, std::vector<std::pair<String, String>> headers) {
+    String queryParams = BuildQueryString(params); // create query params string
 
     http.begin(url + queryParams);
 
-    // use basic authentication if provided
-    if (basicAuthentication.first.length() && basicAuthentication.second.length()) {
-        http.setAuthorization(basicAuthentication.first.c_str(), basicAuthentication.second.c_str());
+    // add headers to request
+    for (auto& header : headers) {
+        http.addHeader(header.first, header.second);
     }
 
     // send request and handle response 
     int responseCode = http.GET();
+    String response = "";
+
+    if (responseCode > 0) {
+        Serial.print("Response code: ");
+        Serial.println(responseCode);
+        response = http.getString();
+    }
+    else {
+        Serial.print("Error: ");
+        Serial.println(http.errorToString(responseCode));
+    }
+
+    http.end();
+    return response;
+}
+
+String HttpRequestManager::Post(String url, String body, std::vector<std::pair<String, String>> headers)
+{
+    http.begin(url);
+
+    // add headers to request
+    for (auto& header : headers) {
+        http.addHeader(header.first, header.second);
+    }
+
+    // send request and handle response 
+    int responseCode = http.POST(body);
     String response = "";
 
     if (responseCode > 0) {
