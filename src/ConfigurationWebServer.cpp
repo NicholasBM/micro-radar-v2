@@ -70,6 +70,33 @@ static const char CONFIG_HTML[] PROGMEM = R"(
                         class="flex-1 border border-green-500 bg-gray-900 w-full px-3 py-2 text-lg sm:text-base sm:px-1 sm:py-0">
                 </label>
 
+                <div class="flex flex-col sm:flex-row gap-4 sm:justify-between">
+                    <label class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                        <span>Radar sweep:</span>
+                        <input
+                            name="scanline"
+                            type="checkbox"
+                            %SCANLINE%
+                            class="px-3 sm:px-1 accent-green-500">
+                    </label>
+                    <label class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                        <span>Aircraft Info:</span>
+                        <input
+                            name="infotext"
+                            type="checkbox"
+                            %INFOTEXT%
+                            class="px-3 sm:px-1 accent-green-500">
+                    </label>
+                    <label class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                        <span>Directional Aircraft:</span>
+                        <input
+                            name="triangle"
+                            type="checkbox"
+                            %TRIANGLE%
+                            class="px-3 sm:px-1 accent-green-500">
+                    </label>
+                </div>
+
                 <div class="flex flex-col sm:flex-row gap-4 sm:gap-5">
                     <input
                         type="submit"
@@ -106,6 +133,9 @@ void ConfigurationWebServer::Initialise() {
         const String radius = prefs.getString("radius", "1.0");
         const String openskyClientId = prefs.getString("opensky-id", "");
         String openskySecret = prefs.getString("opensky-secret", "");
+        const String scanlineEnabled = prefs.getString("scanline", "true");
+        const String infoTextEnabled = prefs.getString("infotext", "true");
+        const String triangleEnabled = prefs.getString("triangle", "true");
         prefs.end();
 
         // mask secret before sending to client
@@ -115,13 +145,16 @@ void ConfigurationWebServer::Initialise() {
         AsyncWebServerResponse* response = request->beginResponse(
             200, "text/html",
             (const uint8_t*)CONFIG_HTML, sizeof(CONFIG_HTML) - 1,
-            [latitude, longitude, radius, openskyClientId, openskySecret]
+            [latitude, longitude, radius, openskyClientId, openskySecret, scanlineEnabled, infoTextEnabled, triangleEnabled]
             (const String& var) -> String {
                 if (var == "LATITUDE")       return latitude;
                 if (var == "LONGITUDE")      return longitude;
                 if (var == "RADIUS")         return radius;
                 if (var == "OPENSKY_ID")     return openskyClientId;
                 if (var == "OPENSKY_SECRET") return openskySecret;
+                if (var == "SCANLINE")       return scanlineEnabled == "true" ? "checked" : "";
+                if (var == "INFOTEXT")       return infoTextEnabled == "true" ? "checked" : "";
+                if (var == "TRIANGLE")       return triangleEnabled == "true" ? "checked" : "";
                 return "";
             }
         );
@@ -142,6 +175,9 @@ void ConfigurationWebServer::Initialise() {
             if (secret.indexOf('*') == -1)            // don't overwrite with masked value
                 prefs.putString("opensky-secret", secret);
         }
+        prefs.putString("scanline", request->hasParam("scanline", true) ? "true" : "false");
+        prefs.putString("triangle", request->hasParam("triangle", true) ? "true" : "false");
+        prefs.putString("infotext", request->hasParam("infotext", true) ? "true" : "false");
         prefs.end();
 
         request->send(200, "text/html", "Saved - restarting device...");

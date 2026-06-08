@@ -15,6 +15,8 @@ private:
     double rad = 0.2;
     std::map<String, TrackedAircraft> trackedAircraft;
 
+    bool displayInfoText = true;
+    bool displayTriangles = true;
 
     unsigned long fetchInterval = 0;
     unsigned long lastFetch = 999999;

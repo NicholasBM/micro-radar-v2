@@ -60,13 +60,18 @@ void loop()
 
   // draw cycle
   backbuffer.fillScreen(lgfx::color888(0, 0, 0));
-  DrawScanLines(backbuffer,
-    SCREEN_SIZE_DIV_2 - 1,
-    SCREEN_SIZE_DIV_2 - 1,
-    SCREEN_SIZE_DIV_2 - 1 + (std::cos(millis() / 3000.0f) * SCREEN_SIZE_DIV_2),
-    SCREEN_SIZE_DIV_2 - 1 + (std::sin(millis() / 3000.0f) * SCREEN_SIZE_DIV_2),
-    20, 128, 5
-  );
+
+  String renderScanlines = configServer.GetStoredString("scanline");
+  if (renderScanlines.isEmpty() || renderScanlines == "true") {
+    DrawScanLines(backbuffer,
+      SCREEN_SIZE_DIV_2 - 1,
+      SCREEN_SIZE_DIV_2 - 1,
+      SCREEN_SIZE_DIV_2 - 1 + (std::cos(millis() / 3000.0f) * SCREEN_SIZE_DIV_2),
+      SCREEN_SIZE_DIV_2 - 1 + (std::sin(millis() / 3000.0f) * SCREEN_SIZE_DIV_2),
+      20, 128, 5
+    );
+  }
+
   aircraftManager.Draw(backbuffer);
   backbuffer.pushSprite(0, 0);
 }

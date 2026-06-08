@@ -7,12 +7,18 @@ constexpr int SCREEN_SIZE_DIV_2 = (SCREEN_SIZE / 2);
 
 void AircraftManager::Initialise()
 {
-    // Get centre point + radius
+    // get centre point + radius
     lat = configServer.GetStoredString("latitude").toDouble();
     lon = configServer.GetStoredString("longitude").toDouble();
     rad = configServer.GetStoredString("radius").toDouble();
 
-    // Calculate how often we can call OpenSky API before being rate limited
+    // configuration
+    String renderText = configServer.GetStoredString("infotext");
+    String renderTris = configServer.GetStoredString("triangle");
+    if (!renderText.isEmpty()) displayInfoText = renderText == "true" ? true : false;
+    if (!renderTris.isEmpty()) displayTriangles = renderTris == "true" ? true : false;
+
+    // calculate how often we can call OpenSky API before being rate limited
     const unsigned int msPerDay = 24 * 60 * 60 * 1000;
     int dailyRequestBudget = 400 - 5; // non-authed tokens minus buffer
 
@@ -114,13 +120,20 @@ void AircraftManager::Draw(LGFX_Sprite& backbuffer)
         float rightY = y - dy * length * 0.5f - py * width * 0.5f;
 
         // draw text
-        backbuffer.setTextSize(1);
-        backbuffer.setTextColor(lgfx::color888(0, 128, 0));
-        backbuffer.drawString(tracked.state.callsign, x + 5, y + 5);
-        backbuffer.drawString(String(tracked.state.velocity) + "m/s", x + 5, y + 5 + (tft.fontHeight() + 1));
-        backbuffer.drawString(String(tracked.state.baroAltitude) + "m", x + 5, y + 5 + (tft.fontHeight() * 2 + 1));
+        if (displayInfoText) {
+            backbuffer.setTextSize(1);
+            backbuffer.setTextColor(lgfx::color888(0, 128, 0));
+            backbuffer.drawString(tracked.state.callsign, x + 5, y + 5);
+            backbuffer.drawString(String(tracked.state.velocity) + "m/s", x + 5, y + 5 + (tft.fontHeight() + 1));
+            backbuffer.drawString(String(tracked.state.baroAltitude) + "m", x + 5, y + 5 + (tft.fontHeight() * 2 + 1));
+        }
 
         // draw representation of plane
-        backbuffer.fillTriangle(tipX, tipY, leftX, leftY, rightX, rightY, lgfx::color888(0, 255, 0));
+        if (displayTriangles) {
+            backbuffer.fillTriangle(tipX, tipY, leftX, leftY, rightX, rightY, lgfx::color888(0, 255, 0));
+        }
+        else {
+            backbuffer.fillCircle(x, y, 3, lgfx::color888(0, 255, 0));
+        }
     }
 }
