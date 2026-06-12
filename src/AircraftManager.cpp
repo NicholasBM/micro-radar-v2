@@ -71,6 +71,15 @@ void AircraftManager::Update()
             else
                 it->second.Update(ac, now);
         }
+
+        // remove any planes that disappeared from the feed
+        for (auto it = trackedAircraft.begin(); it != trackedAircraft.end(); ) {
+            bool aircraftPresent = std::any_of(aircraft.begin(), aircraft.end(), [&](const Aircraft& ac) { return ac.icao24 == it->first; });
+            if (!aircraftPresent)
+                it = trackedAircraft.erase(it);
+            else
+                ++it;
+        }
     }
 }
 
