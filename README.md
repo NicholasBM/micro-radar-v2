@@ -8,7 +8,7 @@
   <img src="https://github.com/user-attachments/assets/2ccb2063-d15c-4180-8e3c-ae3a81c814ff" alt="drawing" width="400"/>
 </p>
 <p align=center>
-  <a href="#prerequisites">PREREQUISITES</a> - <a href="#assembly">ASSEMBLY</a> - <a href="#usage">USAGE</a>
+  <a href="#prerequisites">PREREQUISITES</a> - <a href="#assembly">ASSEMBLY</a> - <a href="#usage">USAGE</a> - <a href="#faq">FAQ</a>
 </p>
 
 ## Prerequisites
@@ -187,6 +187,36 @@ This configuration page is accessible anytime the device is connected to WiFi, s
 That's it! Once you've configured everything, you should see a live view of all flights over your location. Enjoy :)
 
 <img width="400" alt="IMG_7935" src="https://github.com/user-attachments/assets/118b9a1c-c2c0-488d-b638-d8684a30b1d7" />
+
+## FAQ
+
+> the port is busy or doesn't exist
+
+Restart VS Code *after* plugging in the device. If VS Code was already open, it may default to a stale port from before the device was connected.
+
+If that doesn't work, look for the button with a small "Plug" icon on VS Code's bottom bar (it might say "auto", "cu.usbmodem101", or similar). Click it and select the option that shows your device's name.
+<br/><br/>
+
+> the 3D print failed
+
+If you're using a Bambu Lab printer, make sure you're opening the `.3mf` file, since it includes the correct print bed and settings.
+
+Using a different printer? Open an [Issue](../../issues) and I'll try to help where I can.
+<br/><br/>
+
+> `ModuleNotFoundError: No module named 'intelhex'` when building
+
+This appears to be a Windows-specific issue. Either of these should fix it:
+
+**Option A:**
+1. Open the PlatformIO terminal (PlatformIO sidebar → Miscellaneous → PlatformIO Core CLI)
+2. Run `pip install intelhex`
+3. Rebuild
+
+**Option B:**
+1. Open a new terminal in VS Code (Terminal → New Terminal)
+2. Run `python -m pip install intelhex`
+3. Rebuild
 
 ## Notes
 
