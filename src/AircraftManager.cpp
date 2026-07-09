@@ -110,8 +110,6 @@ void AircraftManager::Draw(LGFX_Sprite& backbuffer)
 
         uint32_t color = GetProximityColor(tracked);
 
-        DrawTrail(backbuffer, tracked, color);
-
         if (displayInfoText)
             DrawAircraftInfo(backbuffer, x, y, tracked);
 
@@ -210,18 +208,6 @@ float AircraftManager::DistanceBetweenAircraft(const TrackedAircraft& a, const T
     return sqrt(dLat * dLat + dLon * dLon + dAlt * dAlt);
 }
 
-void AircraftManager::DrawTrail(LGFX_Sprite& backbuffer, const TrackedAircraft& tracked, uint32_t color) const
-{
-    int count = tracked.trail.size();
-    for (int i = 0; i < count; i++) {
-        auto [sx, sy] = ProjectCoordinateToScreen(tracked.trail[i].first, tracked.trail[i].second);
-        float fade = (float)(i + 1) / (float)(count + 1);
-        uint8_t r = ((color >> 16) & 0xFF) * fade * 0.5f;
-        uint8_t g = ((color >> 8) & 0xFF) * fade * 0.5f;
-        uint8_t b = (color & 0xFF) * fade * 0.5f;
-        backbuffer.fillCircle(sx, sy, 1, lgfx::color888(r, g, b));
-    }
-}
 
 void AircraftManager::DrawSquawkAlert(LGFX_Sprite& backbuffer, int x, int y, const TrackedAircraft& tracked) const
 {
