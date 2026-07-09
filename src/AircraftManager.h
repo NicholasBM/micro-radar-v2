@@ -7,6 +7,7 @@
 #include "OpenSkyAuthTokenHandler.h"
 #include "LGFX.h"
 
+
 class AircraftManager
 {
 private:
@@ -14,6 +15,7 @@ private:
     double lon = 0.0;
     double rad = 0.2;
     std::map<String, TrackedAircraft> trackedAircraft;
+    std::map<String, String> routeCache;
 
     bool displayInfoText = true;
     bool displayTriangles = true;
@@ -29,7 +31,12 @@ private:
     void DrawRadarCircles(LGFX_Sprite& backbuffer) const;
     std::pair<int, int> ProjectCoordinateToScreen(float predLat, float predLon) const;
     void DrawAircraftInfo(LGFX_Sprite& backbuffer, int x, int y, const TrackedAircraft& tracked) const;
-    void DrawAircraftTriangle(LGFX_Sprite& backbuffer, int x, int y, const TrackedAircraft& tracked) const;
+    void DrawAircraftTriangle(LGFX_Sprite& backbuffer, int x, int y, const TrackedAircraft& tracked, uint32_t color) const;
+    void DrawTrail(LGFX_Sprite& backbuffer, const TrackedAircraft& tracked, uint32_t color) const;
+    void DrawSquawkAlert(LGFX_Sprite& backbuffer, int x, int y, const TrackedAircraft& tracked) const;
+    uint32_t GetProximityColor(const TrackedAircraft& tracked) const;
+    float DistanceBetweenAircraft(const TrackedAircraft& a, const TrackedAircraft& b) const;
+    void FetchRoutes();
 
 public:
     AircraftManager(ConfigurationWebServer& config, OpenSkyAuthTokenHandler& auth, HttpRequestManager& httpManager, LGFX& tftGfx)

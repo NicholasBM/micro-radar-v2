@@ -1,9 +1,10 @@
 #include "AircraftManager.h"
 
+#include <cmath>
+#include <ArduinoJson.h>
+
 constexpr int SCREEN_SIZE = 240;
 constexpr int SCREEN_SIZE_DIV_2 = (SCREEN_SIZE / 2);
-
-#include <ArduinoJson.h>
 
 void AircraftManager::Initialise()
 {
@@ -90,7 +91,10 @@ void AircraftManager::Update()
             else
                 ++it;
         }
+
     }
+
+    FetchRoutes();
 }
 
 void AircraftManager::Draw(LGFX_Sprite& backbuffer)
@@ -104,13 +108,23 @@ void AircraftManager::Draw(LGFX_Sprite& backbuffer)
         auto [predLat, predLon] = tracked.GetDisplayPosition();
         auto [x, y] = ProjectCoordinateToScreen(predLat, predLon);
 
+        uint32_t color = GetProximityColor(tracked);
+
+        DrawTrail(backbuffer, tracked, color);
+
         if (displayInfoText)
             DrawAircraftInfo(backbuffer, x, y, tracked);
 
-        if (displayTriangles)
-            DrawAircraftTriangle(backbuffer, x, y, tracked);
-        else
-            backbuffer.fillCircle(x, y, 3, lgfx::color888(0, 255, 0));
+        if (tracked.state.category == 7) {
+            backbuffer.drawCircle(x, y, 5, color);
+            backbuffer.drawCircle(x, y, 4, color);
+        } else if (displayTriangles) {
+            DrawAircraftTriangle(backbuffer, x, y, tracked, color);
+        } else {
+            backbuffer.fillCircle(x, y, 3, color);
+        }
+
+        DrawSquawkAlert(backbuffer, x, y, tracked);
     }
 }
 
@@ -145,26 +159,141 @@ void AircraftManager::DrawAircraftInfo(LGFX_Sprite& backbuffer, int x, int y, co
     backbuffer.setTextSize(1);
     backbuffer.setTextColor(lgfx::color888(0, 128, 0));
     backbuffer.drawString(tracked.state.callsign, x + 5, y + 5);
-    backbuffer.drawString(String(tracked.state.velocity) + "m/s", x + 5, y + 5 + lineHeight);
-    backbuffer.drawString(String(tracked.state.baroAltitude) + "m", x + 5, y + 5 + lineHeight * 2);
+
+    int line = 1;
+    auto it = routeCache.find(tracked.state.icao24);
+    if (it != routeCache.end() && it->second.length() > 0) {
+        backbuffer.drawString(it->second, x + 5, y + 5 + lineHeight * line);
+        line++;
+    }
+
+    backbuffer.drawString(String((int)(tracked.state.velocity * 2.237f)) + "mph", x + 5, y + 5 + lineHeight * line);
+    line++;
+    backbuffer.drawString(String((int)(tracked.state.baroAltitude * 3.281f)) + "ft", x + 5, y + 5 + lineHeight * line);
 }
 
-void AircraftManager::DrawAircraftTriangle(LGFX_Sprite& backbuffer, int x, int y, const TrackedAircraft& tracked) const
+void AircraftManager::DrawAircraftTriangle(LGFX_Sprite& backbuffer, int x, int y, const TrackedAircraft& tracked, uint32_t color) const
 {
-    const float dx = std::sin(radians(tracked.state.trueTrack));
-    const float dy = -std::cos(radians(tracked.state.trueTrack));
-    const float px = -dy;
-    const float py = dx;
+    const float angle = radians(tracked.state.trueTrack);
+    const float cosA = std::cos(angle);
+    const float sinA = std::sin(angle);
 
-    constexpr float TRIANGLE_LENGTH = 6.0f;
-    constexpr float TRIANGLE_WIDTH = 3.0f;
+    struct Pt { float lx, ly; };
+    const Pt nose  = {  0.0f, -5.0f };
+    const Pt wingL = { -4.0f,  2.0f };
+    const Pt wingR = {  4.0f,  2.0f };
+    const Pt tail  = {  0.0f, -1.0f };
 
-    const float tipX = x + dx * TRIANGLE_LENGTH;
-    const float tipY = y + dy * TRIANGLE_LENGTH;
-    const float leftX = x - dx * TRIANGLE_LENGTH * 0.5f + px * TRIANGLE_WIDTH * 0.5f;
-    const float leftY = y - dy * TRIANGLE_LENGTH * 0.5f + py * TRIANGLE_WIDTH * 0.5f;
-    const float rightX = x - dx * TRIANGLE_LENGTH * 0.5f - px * TRIANGLE_WIDTH * 0.5f;
-    const float rightY = y - dy * TRIANGLE_LENGTH * 0.5f - py * TRIANGLE_WIDTH * 0.5f;
+    auto rotate = [&](const Pt& p) -> std::pair<float, float> {
+        return { x + p.lx * cosA - p.ly * sinA,
+                 y + p.lx * sinA + p.ly * cosA };
+    };
 
-    backbuffer.fillTriangle(tipX, tipY, leftX, leftY, rightX, rightY, lgfx::color888(0, 255, 0));
+    auto [nx, ny] = rotate(nose);
+    auto [wlx, wly] = rotate(wingL);
+    auto [wrx, wry] = rotate(wingR);
+    auto [tx, ty] = rotate(tail);
+
+    backbuffer.fillTriangle(nx, ny, wlx, wly, tx, ty, color);
+    backbuffer.fillTriangle(nx, ny, wrx, wry, tx, ty, color);
 }
+
+float AircraftManager::DistanceBetweenAircraft(const TrackedAircraft& a, const TrackedAircraft& b) const
+{
+    auto [latA, lonA] = a.GetDisplayPosition();
+    auto [latB, lonB] = b.GetDisplayPosition();
+
+    const float dLat = (latB - latA) * 111320.0f;
+    const float dLon = (lonB - lonA) * 111320.0f * cos(radians((latA + latB) / 2.0f));
+    const float dAlt = a.state.baroAltitude - b.state.baroAltitude;
+
+    return sqrt(dLat * dLat + dLon * dLon + dAlt * dAlt);
+}
+
+void AircraftManager::DrawTrail(LGFX_Sprite& backbuffer, const TrackedAircraft& tracked, uint32_t color) const
+{
+    int count = tracked.trail.size();
+    for (int i = 0; i < count; i++) {
+        auto [sx, sy] = ProjectCoordinateToScreen(tracked.trail[i].first, tracked.trail[i].second);
+        float fade = (float)(i + 1) / (float)(count + 1);
+        uint8_t r = ((color >> 16) & 0xFF) * fade * 0.5f;
+        uint8_t g = ((color >> 8) & 0xFF) * fade * 0.5f;
+        uint8_t b = (color & 0xFF) * fade * 0.5f;
+        backbuffer.fillCircle(sx, sy, 1, lgfx::color888(r, g, b));
+    }
+}
+
+void AircraftManager::DrawSquawkAlert(LGFX_Sprite& backbuffer, int x, int y, const TrackedAircraft& tracked) const
+{
+    if (tracked.state.squawk == "7700" || tracked.state.squawk == "7600" || tracked.state.squawk == "7500") {
+        bool blink = (millis() / 500) % 2 == 0;
+        if (blink) {
+            backbuffer.drawCircle(x, y, 10, lgfx::color888(255, 0, 0));
+            backbuffer.drawCircle(x, y, 11, lgfx::color888(255, 0, 0));
+        }
+
+        const char* label = "EMER";
+        if (tracked.state.squawk == "7600") label = "NOCOMM";
+        if (tracked.state.squawk == "7500") label = "HIJACK";
+
+        backbuffer.setTextSize(1);
+        backbuffer.setTextColor(lgfx::color888(255, 0, 0));
+        backbuffer.drawString(label, x - 12, y - 16);
+    }
+}
+
+uint32_t AircraftManager::GetProximityColor(const TrackedAircraft& tracked) const
+{
+    constexpr float CLOSE_THRESHOLD = 2000.0f;   // 2km — red
+    constexpr float MEDIUM_THRESHOLD = 5000.0f;  // 5km — yellow
+
+    float minDist = 999999.0f;
+
+    for (const auto& [icao, other] : trackedAircraft) {
+        if (other.state.icao24 == tracked.state.icao24) continue;
+        if (other.state.onGround) continue;
+
+        float dist = DistanceBetweenAircraft(tracked, other);
+        if (dist < minDist) minDist = dist;
+    }
+
+    if (minDist < CLOSE_THRESHOLD)
+        return lgfx::color888(255, 0, 0);      // red
+    if (minDist < MEDIUM_THRESHOLD)
+        return lgfx::color888(255, 200, 0);    // yellow/amber
+    return lgfx::color888(0, 255, 0);          // green (default)
+}
+
+void AircraftManager::FetchRoutes()
+{
+    for (auto& [icao, tracked] : trackedAircraft) {
+        if (routeCache.count(icao)) continue;
+
+        String callsign = tracked.state.callsign;
+        callsign.trim();
+        if (callsign.isEmpty()) {
+            routeCache[icao] = "";
+            continue;
+        }
+
+        String prefix = callsign.substring(0, 2);
+        String url = "https://vrs-standing-data.adsb.lol/routes/" + prefix + "/" + callsign + ".json";
+
+        HttpResult result = http.Get(url, {}, {});
+
+        if (result.success && result.statusCode == 200) {
+            JsonDocument doc;
+            deserializeJson(doc, result.response);
+            String iata = doc["_airport_codes_iata"] | "";
+            if (iata.length() > 0) {
+                iata.replace("-", ">");
+                routeCache[icao] = iata;
+            } else {
+                routeCache[icao] = "";
+            }
+        } else {
+            routeCache[icao] = "";
+        }
+    }
+}
+

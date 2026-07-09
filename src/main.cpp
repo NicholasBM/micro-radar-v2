@@ -12,10 +12,6 @@
 #include "models/Aircraft.h"
 #include "models/TrackedAircraft.h"
 
-// Optional hard-coded Wi-Fi credentials. Leave both blank to skip pre-baking them and use the setup hotspot instead.
-const char* preconfiguredWifiSsid = "";
-const char* preconfiguredWifiPassword = "";
-
 constexpr int SCREEN_SIZE = 240;
 constexpr int SCREEN_SIZE_DIV_2 = (SCREEN_SIZE / 2);
 
@@ -49,12 +45,6 @@ void setup()
   tft.drawCentreString("Connecting to WiFi...", SCREEN_SIZE / 2, SCREEN_SIZE / 2);
 
   WiFiManagerHelpers::ConfigureWiFiManager(wm, tft);
-
-  if (strlen(preconfiguredWifiSsid) > 0) {
-    WiFi.begin(preconfiguredWifiSsid, preconfiguredWifiPassword);
-    WiFi.waitForConnectResult();
-  }
-
   wm.autoConnect(WiFiManagerHelpers::WiFiManagerName);
 
   // begin background server for configuration

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vector>
 #include "Aircraft.h"
 
 struct TrackedAircraft {
@@ -12,6 +13,9 @@ struct TrackedAircraft {
     float blendAlpha = 1.0f;  // 1.0 = blend complete, no interpolation active
 
     unsigned long lastTick = 0;
+
+    static constexpr int MAX_TRAIL = 6;
+    std::vector<std::pair<float, float>> trail;
 
     // first appearance, no blend needed
     TrackedAircraft(const Aircraft& ac, unsigned long now)
@@ -28,6 +32,11 @@ struct TrackedAircraft {
         blendFromLat = curLat;
         blendFromLon = curLon;
         blendAlpha = 0.0f;  // restart blend
+
+        // record trail point
+        trail.push_back({ curLat, curLon });
+        if ((int)trail.size() > MAX_TRAIL)
+            trail.erase(trail.begin());
 
         state = newState;
         lastSeen = now;
