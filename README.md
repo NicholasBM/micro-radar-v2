@@ -1,15 +1,23 @@
 <h1 align=center>
-  📡 Micro Radar
+  📡 Micro Radar v2
 </h1>
 <h6 align=center>
   a tiny open-source flight radar for your desk
 </h6>
 <p align=center>
-  <img src="[[[https://github.com/user-attachments/assets/2ccb2063-d15c-4180-8e3c-ae3a81c814ff](https://github.com/NicholasBM/micro-radar-v2/blob/main/%C2%A3Dradar.png)](https://github.com/NicholasBM/micro-radar-v2/blob/main/%C2%A3Dradar.png)](https://github.com/NicholasBM/micro-radar-v2/blob/main/%C2%A3Dradar.png)" alt="drawing" width="400"/>
+  <img src="£Dradar.png" alt="micro radar v2" width="400"/>
 </p>
 <p align=center>
   <a href="#prerequisites">PREREQUISITES</a> - <a href="#assembly">ASSEMBLY</a> - <a href="#usage">USAGE</a> - <a href="#faq">FAQ</a>
 </p>
+
+> Fork of [AnthonySturdy/micro-radar](https://github.com/AnthonySturdy/micro-radar) with additional features:
+> - **Proximity coloring** — aircraft turn red (<2km) or yellow (<5km) when near each other
+> - **Squawk alerts** — flashing red ring + label for emergency codes (7700/7600/7500)
+> - **Route display** — shows origin > destination airports (e.g. BCN>MAN) via adsb.lol
+> - **Helicopter icons** — rotorcraft shown as circles instead of arrows
+> - **Improved triangles** — fixed rotation direction, deeper chevron shape
+> - **Units** — speed in mph, altitude in feet
 
 ## Prerequisites
 
