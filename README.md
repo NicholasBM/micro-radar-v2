@@ -1,5 +1,5 @@
 <h1 align=center>
-  📡 Micro Radar v2
+  📡 Micro Radar v2 - Destination Included
 </h1>
 <h6 align=center>
   a tiny open-source flight radar for your desk
