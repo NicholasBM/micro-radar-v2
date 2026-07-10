@@ -5,7 +5,7 @@
   a tiny open-source flight radar for your desk
 </h6>
 <p align=center>
-  <img src="[https://github.com/user-attachments/assets/2ccb2063-d15c-4180-8e3c-ae3a81c814ff](https://github.com/NicholasBM/micro-radar-v2/blob/main/%C2%A3Dradar.png)" alt="drawing" width="400"/>
+  <img src="[[https://github.com/user-attachments/assets/2ccb2063-d15c-4180-8e3c-ae3a81c814ff](https://github.com/NicholasBM/micro-radar-v2/blob/main/%C2%A3Dradar.png)](https://github.com/NicholasBM/micro-radar-v2/blob/main/%C2%A3Dradar.png)" alt="drawing" width="400"/>
 </p>
 <p align=center>
   <a href="#prerequisites">PREREQUISITES</a> - <a href="#assembly">ASSEMBLY</a> - <a href="#usage">USAGE</a> - <a href="#faq">FAQ</a>
