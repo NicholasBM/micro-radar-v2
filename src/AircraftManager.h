@@ -24,6 +24,7 @@ private:
 
     bool displayInfoText = true;
     bool displayTriangles = true;
+    bool useMetricUnits = false;
 
     unsigned long fetchInterval = 0;
     unsigned long lastFetch = 999999;

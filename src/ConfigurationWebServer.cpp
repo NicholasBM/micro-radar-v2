@@ -95,6 +95,13 @@ static const char CONFIG_HTML[] PROGMEM = R"(
                             %TRIANGLE%
                             class="px-3 sm:px-1 accent-green-500">
                     </label>
+                    <label class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                        <span>Units:</span>
+                        <select name="units" class="px-3 sm:px-1 bg-black text-green-500 border border-green-500">
+                            <option value="imperial" %UNITS_IMPERIAL%>Imperial (mph / ft)</option>
+                            <option value="metric" %UNITS_METRIC%>Metric (km/h / m)</option>
+                        </select>
+                    </label>
                 </div>
 
                 <div class="flex flex-col sm:flex-row gap-4 sm:gap-5">
@@ -140,6 +147,7 @@ void ConfigurationWebServer::Initialise() {
         const String scanlineEnabled = prefs.getString("scanline", "true");
         const String infoTextEnabled = prefs.getString("infotext", "true");
         const String triangleEnabled = prefs.getString("triangle", "true");
+        const String unitsValue = prefs.getString("units", "imperial");
         prefs.end();
 
         // mask secret before sending to client
@@ -149,7 +157,7 @@ void ConfigurationWebServer::Initialise() {
         AsyncWebServerResponse* response = request->beginResponse(
             200, "text/html",
             (const uint8_t*)CONFIG_HTML, sizeof(CONFIG_HTML) - 1,
-            [latitude, longitude, radius, openskyClientId, openskySecret, scanlineEnabled, infoTextEnabled, triangleEnabled]
+            [latitude, longitude, radius, openskyClientId, openskySecret, scanlineEnabled, infoTextEnabled, triangleEnabled, unitsValue]
             (const String& var) -> String {
                 if (var == "LATITUDE")       return latitude;
                 if (var == "LONGITUDE")      return longitude;
@@ -159,6 +167,8 @@ void ConfigurationWebServer::Initialise() {
                 if (var == "SCANLINE")       return scanlineEnabled == "true" ? "checked" : "";
                 if (var == "INFOTEXT")       return infoTextEnabled == "true" ? "checked" : "";
                 if (var == "TRIANGLE")       return triangleEnabled == "true" ? "checked" : "";
+                if (var == "UNITS_IMPERIAL") return unitsValue == "metric" ? "" : "selected";
+                if (var == "UNITS_METRIC")   return unitsValue == "metric" ? "selected" : "";
                 return "";
             }
         );
@@ -198,6 +208,7 @@ void ConfigurationWebServer::Initialise() {
         prefs.putString("scanline", request->hasParam("scanline", true) ? "true" : "false");
         prefs.putString("triangle", request->hasParam("triangle", true) ? "true" : "false");
         prefs.putString("infotext", request->hasParam("infotext", true) ? "true" : "false");
+        TrySaveParam("units");
         prefs.end();
 
         request->send(200, "text/html", "Saved - restarting device...");

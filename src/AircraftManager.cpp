@@ -16,8 +16,10 @@ void AircraftManager::Initialise()
     // configuration
     const String renderText = configServer.GetStoredString("infotext");
     const String renderTris = configServer.GetStoredString("triangle");
+    const String units = configServer.GetStoredString("units");
     if (!renderText.isEmpty()) displayInfoText = renderText == "true" ? true : false;
     if (!renderTris.isEmpty()) displayTriangles = renderTris == "true" ? true : false;
+    if (!units.isEmpty()) useMetricUnits = units == "metric";
 
     // calculate how often we can call OpenSky API before being rate limited
     constexpr int MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -155,9 +157,10 @@ void AircraftManager::DrawAircraftInfo(LGFX_Sprite& backbuffer, int x, int y, co
     const int lineHeight = tft.fontHeight() + 1;
 
     backbuffer.setTextSize(1);
-    backbuffer.setTextColor(lgfx::color888(0, 128, 0));
+    backbuffer.setTextColor(lgfx::color888(0, 200, 0));
     backbuffer.drawString(tracked.state.callsign, x + 5, y + 5);
 
+    backbuffer.setTextColor(lgfx::color888(0, 128, 0));
     int line = 1;
     auto it = routeCache.find(tracked.state.icao24);
     if (it != routeCache.end() && it->second.route.length() > 0) {
@@ -165,9 +168,15 @@ void AircraftManager::DrawAircraftInfo(LGFX_Sprite& backbuffer, int x, int y, co
         line++;
     }
 
-    backbuffer.drawString(String((int)(tracked.state.velocity * 2.237f)) + "mph", x + 5, y + 5 + lineHeight * line);
-    line++;
-    backbuffer.drawString(String((int)(tracked.state.baroAltitude * 3.281f)) + "ft", x + 5, y + 5 + lineHeight * line);
+    if (useMetricUnits) {
+        backbuffer.drawString(String((int)(tracked.state.velocity * 3.6f)) + " km/h", x + 5, y + 5 + lineHeight * line);
+        line++;
+        backbuffer.drawString(String((int)tracked.state.baroAltitude) + " m", x + 5, y + 5 + lineHeight * line);
+    } else {
+        backbuffer.drawString(String((int)(tracked.state.velocity * 2.237f)) + " mph", x + 5, y + 5 + lineHeight * line);
+        line++;
+        backbuffer.drawString(String((int)(tracked.state.baroAltitude * 3.281f)) + " ft", x + 5, y + 5 + lineHeight * line);
+    }
 }
 
 void AircraftManager::DrawAircraftTriangle(LGFX_Sprite& backbuffer, int x, int y, const TrackedAircraft& tracked, uint32_t color) const
