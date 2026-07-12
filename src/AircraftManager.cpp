@@ -17,9 +17,11 @@ void AircraftManager::Initialise()
     const String renderText = configServer.GetStoredString("infotext");
     const String renderTris = configServer.GetStoredString("triangle");
     const String units = configServer.GetStoredString("units");
+    const String altSize = configServer.GetStoredString("altsize");
     if (!renderText.isEmpty()) displayInfoText = renderText == "true" ? true : false;
     if (!renderTris.isEmpty()) displayTriangles = renderTris == "true" ? true : false;
     if (!units.isEmpty()) useMetricUnits = units == "metric";
+    if (!altSize.isEmpty()) useAltitudeScaling = altSize == "true";
 
     // calculate how often we can call OpenSky API before being rate limited
     constexpr int MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -118,8 +120,14 @@ void AircraftManager::Draw(LGFX_Sprite& backbuffer)
             DrawAircraftInfo(backbuffer, x, y, tracked);
 
         if (tracked.state.category == 7) {
-            backbuffer.drawCircle(x, y, 5, color);
-            backbuffer.drawCircle(x, y, 4, color);
+            float altFactor = 1.0f;
+            if (useAltitudeScaling) {
+                altFactor = 1.6f - (tracked.state.baroAltitude / 12000.0f) * 0.9f;
+                altFactor = max(0.7f, min(1.6f, altFactor));
+            }
+            int r = (int)(5.0f * altFactor);
+            backbuffer.drawCircle(x, y, r, color);
+            backbuffer.drawCircle(x, y, r - 1, color);
         } else if (displayTriangles) {
             DrawAircraftTriangle(backbuffer, x, y, tracked, color);
         } else {
@@ -170,28 +178,39 @@ void AircraftManager::DrawAircraftInfo(LGFX_Sprite& backbuffer, int x, int y, co
         line++;
     }
 
+    int speed, alt;
     if (useMetricUnits) {
-        backbuffer.drawString(String((int)(tracked.state.velocity * 3.6f)) + " km/h", x + 5, y + 5 + lineHeight * line);
+        speed = (int)(tracked.state.velocity * 3.6f);
+        alt = max(0, (int)tracked.state.baroAltitude);
+        backbuffer.drawString(String(speed) + " km/h", x + 5, y + 5 + lineHeight * line);
         line++;
-        backbuffer.drawString(String((int)tracked.state.baroAltitude) + " m", x + 5, y + 5 + lineHeight * line);
+        backbuffer.drawString(String(alt) + " m", x + 5, y + 5 + lineHeight * line);
     } else {
-        backbuffer.drawString(String((int)(tracked.state.velocity * 2.237f)) + " mph", x + 5, y + 5 + lineHeight * line);
+        speed = (int)(tracked.state.velocity * 2.237f);
+        alt = max(0, (int)(tracked.state.baroAltitude * 3.281f));
+        backbuffer.drawString(String(speed) + " mph", x + 5, y + 5 + lineHeight * line);
         line++;
-        backbuffer.drawString(String((int)(tracked.state.baroAltitude * 3.281f)) + " ft", x + 5, y + 5 + lineHeight * line);
+        backbuffer.drawString(String(alt) + " ft", x + 5, y + 5 + lineHeight * line);
     }
 }
 
 void AircraftManager::DrawAircraftTriangle(LGFX_Sprite& backbuffer, int x, int y, const TrackedAircraft& tracked, uint32_t color) const
 {
+    float altFactor = 1.0f;
+    if (useAltitudeScaling) {
+        altFactor = 1.6f - (tracked.state.baroAltitude / 12000.0f) * 0.9f;
+        altFactor = max(0.7f, min(1.6f, altFactor));
+    }
+
     const float angle = radians(tracked.state.trueTrack);
     const float cosA = std::cos(angle);
     const float sinA = std::sin(angle);
 
     struct Pt { float lx, ly; };
-    const Pt nose  = {  0.0f, -5.0f };
-    const Pt wingL = { -4.0f,  2.0f };
-    const Pt wingR = {  4.0f,  2.0f };
-    const Pt tail  = {  0.0f, -1.0f };
+    const Pt nose  = {  0.0f, -5.0f * altFactor };
+    const Pt wingL = { -4.0f * altFactor,  2.0f * altFactor };
+    const Pt wingR = {  4.0f * altFactor,  2.0f * altFactor };
+    const Pt tail  = {  0.0f, -1.0f * altFactor };
 
     auto rotate = [&](const Pt& p) -> std::pair<float, float> {
         return { x + p.lx * cosA - p.ly * sinA,

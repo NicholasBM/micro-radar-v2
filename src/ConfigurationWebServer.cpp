@@ -102,6 +102,14 @@ static const char CONFIG_HTML[] PROGMEM = R"(
                             <option value="metric" %UNITS_METRIC%>Metric (km/h / m)</option>
                         </select>
                     </label>
+                    <label class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                        <span>Altitude Sizing:</span>
+                        <input
+                            name="altsize"
+                            type="checkbox"
+                            %ALTSIZE%
+                            class="px-3 sm:px-1 accent-green-500">
+                    </label>
                 </div>
 
                 <div class="flex flex-col sm:flex-row gap-4 sm:gap-5">
@@ -148,6 +156,7 @@ void ConfigurationWebServer::Initialise() {
         const String infoTextEnabled = prefs.getString("infotext", "true");
         const String triangleEnabled = prefs.getString("triangle", "true");
         const String unitsValue = prefs.getString("units", "imperial");
+        const String altSizeEnabled = prefs.getString("altsize", "true");
         prefs.end();
 
         // mask secret before sending to client
@@ -157,7 +166,7 @@ void ConfigurationWebServer::Initialise() {
         AsyncWebServerResponse* response = request->beginResponse(
             200, "text/html",
             (const uint8_t*)CONFIG_HTML, sizeof(CONFIG_HTML) - 1,
-            [latitude, longitude, radius, openskyClientId, openskySecret, scanlineEnabled, infoTextEnabled, triangleEnabled, unitsValue]
+            [latitude, longitude, radius, openskyClientId, openskySecret, scanlineEnabled, infoTextEnabled, triangleEnabled, unitsValue, altSizeEnabled]
             (const String& var) -> String {
                 if (var == "LATITUDE")       return latitude;
                 if (var == "LONGITUDE")      return longitude;
@@ -169,6 +178,7 @@ void ConfigurationWebServer::Initialise() {
                 if (var == "TRIANGLE")       return triangleEnabled == "true" ? "checked" : "";
                 if (var == "UNITS_IMPERIAL") return unitsValue == "metric" ? "" : "selected";
                 if (var == "UNITS_METRIC")   return unitsValue == "metric" ? "selected" : "";
+                if (var == "ALTSIZE")        return altSizeEnabled == "true" ? "checked" : "";
                 return "";
             }
         );
@@ -208,6 +218,7 @@ void ConfigurationWebServer::Initialise() {
         prefs.putString("scanline", request->hasParam("scanline", true) ? "true" : "false");
         prefs.putString("triangle", request->hasParam("triangle", true) ? "true" : "false");
         prefs.putString("infotext", request->hasParam("infotext", true) ? "true" : "false");
+        prefs.putString("altsize", request->hasParam("altsize", true) ? "true" : "false");
         TrySaveParam("units");
         prefs.end();
 
