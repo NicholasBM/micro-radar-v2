@@ -110,7 +110,9 @@ void AircraftManager::Draw(LGFX_Sprite& backbuffer)
         auto [predLat, predLon] = tracked.GetDisplayPosition();
         auto [x, y] = ProjectCoordinateToScreen(predLat, predLon);
 
-        uint32_t color = GetProximityColor(tracked);
+        uint32_t color = IsMilitary(tracked)
+            ? lgfx::color888(0, 100, 255)
+            : GetProximityColor(tracked);
 
         if (displayInfoText)
             DrawAircraftInfo(backbuffer, x, y, tracked);
@@ -235,6 +237,43 @@ void AircraftManager::DrawSquawkAlert(LGFX_Sprite& backbuffer, int x, int y, con
         backbuffer.setTextColor(lgfx::color888(255, 0, 0));
         backbuffer.drawString(label, x - 12, y - 16);
     }
+}
+
+bool AircraftManager::IsMilitary(const TrackedAircraft& tracked) const
+{
+    String callsign = tracked.state.callsign;
+    callsign.trim();
+    if (callsign.isEmpty()) return false;
+
+    static const char* prefixes[] = {
+        "RRR",   // RAF (UK)
+        "RFR",   // French Air Force
+        "GAF",   // German Air Force
+        "IAM",   // Italian Air Force
+        "AME",   // Spanish Air Force
+        "BAF",   // Belgian Air Force
+        "NAF",   // Netherlands Air Force
+        "DAF",   // Danish Air Force
+        "NAF",   // Norwegian Air Force
+        "SVF",   // Swedish Air Force
+        "FAF",   // Finnish Air Force
+        "PLF",   // Polish Air Force
+        "HUF",   // Hungarian Air Force
+        "CFR",   // Canadian Forces
+        "RCH",   // US Air Mobility Command
+        "EVIL",  // US Air Force callsign
+        "DUKE",  // US Air Force
+        "REACH", // US Air Mobility Command
+        "NATO",  // NATO
+        "ASCOT", // RAF transport
+    };
+
+    for (const char* prefix : prefixes) {
+        if (callsign.startsWith(prefix))
+            return true;
+    }
+
+    return false;
 }
 
 uint32_t AircraftManager::GetProximityColor(const TrackedAircraft& tracked) const

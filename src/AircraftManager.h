@@ -40,6 +40,7 @@ private:
     void DrawAircraftTriangle(LGFX_Sprite& backbuffer, int x, int y, const TrackedAircraft& tracked, uint32_t color) const;
     void DrawSquawkAlert(LGFX_Sprite& backbuffer, int x, int y, const TrackedAircraft& tracked) const;
     uint32_t GetProximityColor(const TrackedAircraft& tracked) const;
+    bool IsMilitary(const TrackedAircraft& tracked) const;
     float DistanceBetweenAircraft(const TrackedAircraft& a, const TrackedAircraft& b) const;
     void FetchRoutes();
 
