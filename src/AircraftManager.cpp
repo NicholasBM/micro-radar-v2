@@ -160,8 +160,8 @@ void AircraftManager::DrawAircraftInfo(LGFX_Sprite& backbuffer, int x, int y, co
 
     int line = 1;
     auto it = routeCache.find(tracked.state.icao24);
-    if (it != routeCache.end() && it->second.length() > 0) {
-        backbuffer.drawString(it->second, x + 5, y + 5 + lineHeight * line);
+    if (it != routeCache.end() && it->second.route.length() > 0) {
+        backbuffer.drawString(it->second.route, x + 5, y + 5 + lineHeight * line);
         line++;
     }
 
@@ -252,13 +252,20 @@ uint32_t AircraftManager::GetProximityColor(const TrackedAircraft& tracked) cons
 
 void AircraftManager::FetchRoutes()
 {
+    constexpr unsigned long RETRY_INTERVAL = 300000; // retry failed lookups after 5 min
+    unsigned long now = millis();
+
     for (auto& [icao, tracked] : trackedAircraft) {
-        if (routeCache.count(icao)) continue;
+        auto it = routeCache.find(icao);
+        if (it != routeCache.end()) {
+            if (it->second.route.length() > 0) continue;
+            if (now - it->second.fetchedAt < RETRY_INTERVAL) continue;
+        }
 
         String callsign = tracked.state.callsign;
         callsign.trim();
         if (callsign.isEmpty()) {
-            routeCache[icao] = "";
+            routeCache[icao] = { "", now };
             continue;
         }
 
@@ -272,13 +279,42 @@ void AircraftManager::FetchRoutes()
             deserializeJson(doc, result.response);
             String iata = doc["_airport_codes_iata"] | "";
             if (iata.length() > 0) {
-                iata.replace("-", ">");
-                routeCache[icao] = iata;
+                JsonArray airports = doc["_airports"];
+                if (airports.size() >= 2) {
+                    float originLat = airports[0]["lat"] | 0.0f;
+                    float originLon = airports[0]["lon"] | 0.0f;
+                    float destLat = airports[airports.size() - 1]["lat"] | 0.0f;
+                    float destLon = airports[airports.size() - 1]["lon"] | 0.0f;
+
+                    float headingRad = radians(tracked.state.trueTrack);
+                    float hdgX = sin(headingRad);
+                    float hdgY = cos(headingRad);
+
+                    float toOriginX = originLon - tracked.state.longitude;
+                    float toOriginY = originLat - tracked.state.latitude;
+                    float toDestX = destLon - tracked.state.longitude;
+                    float toDestY = destLat - tracked.state.latitude;
+
+                    float dotOrigin = hdgX * toOriginX + hdgY * toOriginY;
+                    float dotDest = hdgX * toDestX + hdgY * toDestY;
+
+                    int sep = iata.indexOf('-');
+                    String from = iata.substring(0, sep);
+                    String to = iata.substring(sep + 1);
+
+                    if (dotOrigin > dotDest)
+                        routeCache[icao] = { to + ">" + from, now };
+                    else
+                        routeCache[icao] = { from + ">" + to, now };
+                } else {
+                    iata.replace("-", ">");
+                    routeCache[icao] = { iata, now };
+                }
             } else {
-                routeCache[icao] = "";
+                routeCache[icao] = { "", now };
             }
         } else {
-            routeCache[icao] = "";
+            routeCache[icao] = { "", now };
         }
     }
 }

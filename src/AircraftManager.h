@@ -15,7 +15,12 @@ private:
     double lon = 0.0;
     double rad = 0.2;
     std::map<String, TrackedAircraft> trackedAircraft;
-    std::map<String, String> routeCache;
+
+    struct CachedRoute {
+        String route;
+        unsigned long fetchedAt;
+    };
+    std::map<String, CachedRoute> routeCache;
 
     bool displayInfoText = true;
     bool displayTriangles = true;
