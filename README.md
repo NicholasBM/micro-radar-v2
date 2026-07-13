@@ -225,11 +225,52 @@ This appears to be a Windows-specific issue. Either of these should fix it:
 1. Open a new terminal in VS Code (Terminal → New Terminal)
 2. Run `python -m pip install intelhex`
 3. Rebuild
+<br/><br/>
+
+> Planes seem to be in the wrong position compared to FlightRadar24
+
+Make sure your latitude and longitude are as precise as possible. You can get exact coordinates by right-clicking your location in Google Maps. Even a small error (e.g. 53.2 vs 53.294) shifts the centre by several kilometres.
+<br/><br/>
+
+> Some planes don't show a route (origin > destination)
+
+Route data comes from adsb.lol which is a free community database. Not all callsigns are in their system. The device will retry every 5 minutes in case the data appears. Common airlines (easyJet, Ryanair, Lufthansa etc.) usually have good coverage.
+<br/><br/>
+
+> The route seems to be showing the wrong direction (swapped origin/destination)
+
+The route database stores a fixed direction per callsign. We use the aircraft's heading to determine which way it's actually flying, but this can occasionally be wrong if the plane is turning or on a non-standard routing.
+<br/><br/>
+
+> What do the colours mean?
+
+- **Green** — normal aircraft
+- **Red** — two planes within 2km of each other (proximity alert)
+- **Yellow** — two planes within 5km of each other
+- **Blue** — military aircraft (identified by callsign prefix)
+- **Flashing red ring** — emergency squawk code (7700/7600/7500)
+<br/><br/>
+
+> What are the different aircraft shapes?
+
+- **Chevron/arrow** — fixed-wing aircraft, points in direction of travel
+- **Circle** — helicopter/rotorcraft
+- Size varies by altitude (low = bigger, high = smaller) if altitude sizing is enabled
+<br/><br/>
+
+> How do I correct the screen orientation?
+
+If north doesn't align with the top of your physical display, use the **Screen Rotation** setting in the web config. Use your phone compass to find how many degrees off north your device is pointing, then enter that value.
+<br/><br/>
+
+> What's the expanding ring effect on the radar?
+
+When the radar sweep passes over an aircraft, a pulse ring expands outward from the plane — similar to a real radar phosphor display. This is purely cosmetic.
 
 ## Notes
 
-> Designed and developed as part of a wedding present for a mate who loves aviation (congratulations to both him and his wife!)
+> Originally designed and developed by [AnthonySturdy](https://github.com/AnthonySturdy/micro-radar) as part of a wedding present for a mate who loves aviation.
 
 > Inspired by [therealhacksaw](https://www.instagram.com/therealhacksaw/)'s desk radar
 
-> Built with ♥︎ in London
+> v2 features built with ♥︎ in Bollington
