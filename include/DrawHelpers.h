@@ -12,18 +12,21 @@ void DrawScanLines(LGFX_Sprite& buf, const int x0, const int y0, const int x1, c
     float px = -dy / len;
     float py = dx / len;
 
-    // bright leading edge
-    buf.drawLine(x0, y0, x1, y1, lgfx::color888(0, 200, 0));
-
-    // solid gradient trail fading behind the leading edge
-    for (int i = 1; i <= thickness * spacing; i++) {
-        float t = (float)i / (float)(thickness * spacing);
-        uint8_t brightness = (uint8_t)((1.0f - t) * trailBrightness);
+    for (int i = 0; i <= thickness; i++) {
+        // 1.0 at centre, 0.0 at edges
+        float t = i / (float)(thickness);
+        uint8_t brightness = (uint8_t)(t * trailBrightness);
 
         buf.drawLine(
             x0, y0,
-            x1 - (int)(px * i), y1 - (int)(py * i),
+            x1 + (px * (i * spacing)), y1 + (py * (i * spacing)),
             lgfx::color888(0, brightness, 0)
         );
     }
+
+    buf.drawLine(
+        x0, y0,
+        x1 + (px * (thickness * spacing)), y1 + (py * (thickness * spacing)),
+        lgfx::color888(0, 200, 0)
+    );
 }

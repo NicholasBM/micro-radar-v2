@@ -36,7 +36,7 @@ void setup()
   pinMode(3, OUTPUT);
   digitalWrite(3, HIGH);
 
-  backbuffer.setColorDepth(16);
+  backbuffer.setColorDepth(8);
   backbuffer.createSprite(SCREEN_SIZE, SCREEN_SIZE);
 
   // establish WiFi connection

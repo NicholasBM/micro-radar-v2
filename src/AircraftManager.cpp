@@ -93,7 +93,7 @@ void AircraftManager::NetworkTaskFunc(void* param)
             headers
         );
 
-        if (!result.success) continue;
+        if (!result.success || result.statusCode != 200) continue;
 
         JsonDocument doc;
         deserializeJson(doc, result.response);
@@ -214,7 +214,7 @@ void AircraftManager::Draw(LGFX_Sprite& backbuffer, float sweepAngle)
         float planeAngle = atan2(pdy, pdx);
         if (planeAngle < 0) planeAngle += 2.0f * PI;
 
-        float angleDiff = (sweepAngle + 0.75f) - planeAngle;
+        float angleDiff = (sweepAngle + 0.5f) - planeAngle;
         if (angleDiff < 0) angleDiff += 2.0f * PI;
         if (angleDiff > 2.0f * PI) angleDiff -= 2.0f * PI;
 
