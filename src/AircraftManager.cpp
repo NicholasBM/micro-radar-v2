@@ -319,7 +319,7 @@ uint32_t AircraftManager::GetProximityColor(const TrackedAircraft& tracked) cons
 
 void AircraftManager::FetchRoutes()
 {
-    constexpr unsigned long RETRY_INTERVAL = 300000; // retry failed lookups after 5 min
+    constexpr unsigned long RETRY_INTERVAL = 300000;
     unsigned long now = millis();
 
     for (auto& [icao, tracked] : trackedAircraft) {
@@ -336,6 +336,7 @@ void AircraftManager::FetchRoutes()
             continue;
         }
 
+        // only one HTTP request per loop to avoid blocking the display
         String prefix = callsign.substring(0, 2);
         String url = "https://vrs-standing-data.adsb.lol/routes/" + prefix + "/" + callsign + ".json";
 
@@ -383,6 +384,8 @@ void AircraftManager::FetchRoutes()
         } else {
             routeCache[icao] = { "", now };
         }
+
+        return; // fetch only one per loop cycle
     }
 }
 
