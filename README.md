@@ -13,11 +13,19 @@
 
 > Fork of [AnthonySturdy/micro-radar](https://github.com/AnthonySturdy/micro-radar) with additional features:
 > - **Proximity coloring** — aircraft turn red (<2km) or yellow (<5km) when near each other
+> - **Military detection** — military aircraft shown in blue (RAF, NATO, USAF, etc.)
 > - **Squawk alerts** — flashing red ring + label for emergency codes (7700/7600/7500)
 > - **Route display** — shows origin > destination airports (e.g. BCN>MAN) via adsb.lol
 > - **Helicopter icons** — rotorcraft shown as circles instead of arrows
+> - **Altitude-based sizing** — low planes appear bigger, cruising planes smaller
+> - **Radar sweep pulse** — expanding ring + chevron flash when sweep hits a plane
+> - **Compass rose** — N/S/E/W markers at screen edge
+> - **Range labels** — distance markers on radar rings (km or miles)
+> - **Screen rotation** — configurable offset for physical mounting alignment
+> - **Background networking** — all HTTP runs in a FreeRTOS task, zero display freezes
+> - **Longitude correction** — proper map proportions at any latitude
+> - **Configurable units** — Imperial (mph/ft) or Metric (km/h/m) via web settings
 > - **Improved triangles** — fixed rotation direction, deeper chevron shape
-> - **Units** — speed in mph, altitude in feet
 
 ## Prerequisites
 
