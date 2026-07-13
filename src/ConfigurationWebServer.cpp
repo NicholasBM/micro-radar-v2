@@ -110,6 +110,26 @@ static const char CONFIG_HTML[] PROGMEM = R"(
                             %ALTSIZE%
                             class="px-3 sm:px-1 accent-green-500">
                     </label>
+                    <label class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                        <span>Range Labels:</span>
+                        <input
+                            name="rangelabels"
+                            type="checkbox"
+                            %RANGELABELS%
+                            class="px-3 sm:px-1 accent-green-500">
+                    </label>
+                    <label class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                        <span>Screen Rotation:</span>
+                        <input
+                            name="rotation"
+                            type="number"
+                            step="0.5"
+                            min="-180"
+                            max="180"
+                            value="%ROTATION%"
+                            class="w-20 border border-green-500 bg-gray-900 px-3 py-2 text-lg sm:text-base sm:px-1 sm:py-0">
+                        <span class="text-sm text-gray-400">degrees</span>
+                    </label>
                 </div>
 
                 <div class="flex flex-col sm:flex-row gap-4 sm:gap-5">
@@ -157,6 +177,8 @@ void ConfigurationWebServer::Initialise() {
         const String triangleEnabled = prefs.getString("triangle", "true");
         const String unitsValue = prefs.getString("units", "imperial");
         const String altSizeEnabled = prefs.getString("altsize", "true");
+        const String rangeLabelsEnabled = prefs.getString("rangelabels", "true");
+        const String rotationValue = prefs.getString("rotation", "0");
         prefs.end();
 
         // mask secret before sending to client
@@ -166,7 +188,7 @@ void ConfigurationWebServer::Initialise() {
         AsyncWebServerResponse* response = request->beginResponse(
             200, "text/html",
             (const uint8_t*)CONFIG_HTML, sizeof(CONFIG_HTML) - 1,
-            [latitude, longitude, radius, openskyClientId, openskySecret, scanlineEnabled, infoTextEnabled, triangleEnabled, unitsValue, altSizeEnabled]
+            [latitude, longitude, radius, openskyClientId, openskySecret, scanlineEnabled, infoTextEnabled, triangleEnabled, unitsValue, altSizeEnabled, rangeLabelsEnabled, rotationValue]
             (const String& var) -> String {
                 if (var == "LATITUDE")       return latitude;
                 if (var == "LONGITUDE")      return longitude;
@@ -179,6 +201,8 @@ void ConfigurationWebServer::Initialise() {
                 if (var == "UNITS_IMPERIAL") return unitsValue == "metric" ? "" : "selected";
                 if (var == "UNITS_METRIC")   return unitsValue == "metric" ? "selected" : "";
                 if (var == "ALTSIZE")        return altSizeEnabled == "true" ? "checked" : "";
+                if (var == "RANGELABELS")   return rangeLabelsEnabled == "true" ? "checked" : "";
+                if (var == "ROTATION")      return rotationValue;
                 return "";
             }
         );
@@ -219,7 +243,9 @@ void ConfigurationWebServer::Initialise() {
         prefs.putString("triangle", request->hasParam("triangle", true) ? "true" : "false");
         prefs.putString("infotext", request->hasParam("infotext", true) ? "true" : "false");
         prefs.putString("altsize", request->hasParam("altsize", true) ? "true" : "false");
+        prefs.putString("rangelabels", request->hasParam("rangelabels", true) ? "true" : "false");
         TrySaveParam("units");
+        TrySaveParam("rotation");
         prefs.end();
 
         request->send(200, "text/html", "Saved - restarting device...");

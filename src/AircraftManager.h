@@ -1,6 +1,8 @@
 #pragma once
 
 #include <map>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 #include "models/TrackedAircraft.h"
 #include "ConfigurationWebServer.h"
@@ -14,6 +16,8 @@ private:
     double lat = 0.0;
     double lon = 0.0;
     double rad = 0.2;
+
+    // display-side copy (read by main loop)
     std::map<String, TrackedAircraft> trackedAircraft;
 
     struct CachedRoute {
@@ -22,13 +26,20 @@ private:
     };
     std::map<String, CachedRoute> routeCache;
 
+    // network task writes here, main loop swaps in
+    SemaphoreHandle_t dataMutex = nullptr;
+    std::map<String, TrackedAircraft> stagedAircraft;
+    std::map<String, CachedRoute> stagedRoutes;
+    volatile bool newDataReady = false;
+
     bool displayInfoText = true;
     bool displayTriangles = true;
     bool useMetricUnits = false;
     bool useAltitudeScaling = true;
+    bool displayRangeLabels = true;
+    float screenRotation = 0.0f;
 
     unsigned long fetchInterval = 0;
-    unsigned long lastFetch = 999999;
 
     ConfigurationWebServer& configServer;
     OpenSkyAuthTokenHandler& authHandler;
@@ -38,12 +49,13 @@ private:
     void DrawRadarCircles(LGFX_Sprite& backbuffer) const;
     std::pair<int, int> ProjectCoordinateToScreen(float predLat, float predLon) const;
     void DrawAircraftInfo(LGFX_Sprite& backbuffer, int x, int y, const TrackedAircraft& tracked) const;
-    void DrawAircraftTriangle(LGFX_Sprite& backbuffer, int x, int y, const TrackedAircraft& tracked, uint32_t color) const;
+    void DrawAircraftTriangle(LGFX_Sprite& backbuffer, int x, int y, const TrackedAircraft& tracked, uint32_t color, float scaleOverride = 0.0f) const;
     void DrawSquawkAlert(LGFX_Sprite& backbuffer, int x, int y, const TrackedAircraft& tracked) const;
     uint32_t GetProximityColor(const TrackedAircraft& tracked) const;
     bool IsMilitary(const TrackedAircraft& tracked) const;
     float DistanceBetweenAircraft(const TrackedAircraft& a, const TrackedAircraft& b) const;
-    void FetchRoutes();
+
+    static void NetworkTaskFunc(void* param);
 
 public:
     AircraftManager(ConfigurationWebServer& config, OpenSkyAuthTokenHandler& auth, HttpRequestManager& httpManager, LGFX& tftGfx)
@@ -54,5 +66,5 @@ public:
 
     void Initialise();
     void Update();
-    void Draw(LGFX_Sprite& backbuffer);
+    void Draw(LGFX_Sprite& backbuffer, float sweepAngle);
 };

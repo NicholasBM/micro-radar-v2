@@ -20,88 +20,180 @@ void AircraftManager::Initialise()
     const String altSize = configServer.GetStoredString("altsize");
     if (!renderText.isEmpty()) displayInfoText = renderText == "true" ? true : false;
     if (!renderTris.isEmpty()) displayTriangles = renderTris == "true" ? true : false;
+    const String rangeLabels = configServer.GetStoredString("rangelabels");
     if (!units.isEmpty()) useMetricUnits = units == "metric";
     if (!altSize.isEmpty()) useAltitudeScaling = altSize == "true";
+    const String rotation = configServer.GetStoredString("rotation");
+    if (!rangeLabels.isEmpty()) displayRangeLabels = rangeLabels == "true";
+    if (!rotation.isEmpty()) screenRotation = rotation.toFloat();
 
     // calculate how often we can call OpenSky API before being rate limited
     constexpr int MS_PER_DAY = 24 * 60 * 60 * 1000;
     constexpr int ANONYMOUS_TOKENS_PER_DAY = 400;
     constexpr int AUTHED_TOKENS_PER_DAY = 4000;
     constexpr int TOKEN_BUFFER = 3;
-    int dailyRequestBudget = ANONYMOUS_TOKENS_PER_DAY - TOKEN_BUFFER; // non-authed tokens minus buffer
+    int dailyRequestBudget = ANONYMOUS_TOKENS_PER_DAY - TOKEN_BUFFER;
 
     const String token = authHandler.GetValidToken(configServer.GetStoredString("opensky-id"), configServer.GetStoredString("opensky-secret"));
     if (!token.isEmpty())
-        dailyRequestBudget = AUTHED_TOKENS_PER_DAY - TOKEN_BUFFER; // authed tokens minus buffer
+        dailyRequestBudget = AUTHED_TOKENS_PER_DAY - TOKEN_BUFFER;
 
     fetchInterval = MS_PER_DAY / dailyRequestBudget;
+
+    // start background network task
+    dataMutex = xSemaphoreCreateMutex();
+    xTaskCreate(NetworkTaskFunc, "network", 10240, this, 1, nullptr);
 }
 
 void AircraftManager::Update()
 {
-    unsigned long now = millis();
+    // swap in new data from background task if available
+    if (newDataReady && xSemaphoreTake(dataMutex, 0) == pdTRUE) {
+        trackedAircraft = stagedAircraft;
+        routeCache = stagedRoutes;
+        newDataReady = false;
+        xSemaphoreGive(dataMutex);
+    }
 
-    // fetch cycle
-    if (now - lastFetch >= fetchInterval) {
-        lastFetch = now;
+    // tick all aircraft for position interpolation
+    for (auto& [icao, tracked] : trackedAircraft) {
+        tracked.Tick();
+    }
+}
+
+void AircraftManager::NetworkTaskFunc(void* param)
+{
+    AircraftManager* self = static_cast<AircraftManager*>(param);
+
+    // local working copies
+    std::map<String, TrackedAircraft> localAircraft;
+    std::map<String, CachedRoute> localRoutes;
+
+    while (true) {
+        vTaskDelay(pdMS_TO_TICKS(self->fetchInterval));
 
         // auth
-        const String token = authHandler.GetValidToken(
-            configServer.GetStoredString("opensky-id"),
-            configServer.GetStoredString("opensky-secret")
+        const String token = self->authHandler.GetValidToken(
+            self->configServer.GetStoredString("opensky-id"),
+            self->configServer.GetStoredString("opensky-secret")
         );
 
         std::vector<std::pair<String, String>> headers = {};
         if (!token.isEmpty()) headers.push_back({ "Authorization", "Bearer " + token });
 
-        // request
-        HttpResult result = http.Get(
+        // fetch aircraft
+        HttpResult result = self->http.Get(
             "https://opensky-network.org/api/states/all",
             {
-              {"lamin", String(lat - rad)},
-              {"lamax", String(lat + rad)},
-              {"lomin", String(lon - rad)},
-              {"lomax", String(lon + rad)}
+              {"lamin", String(self->lat - self->rad)},
+              {"lamax", String(self->lat + self->rad)},
+              {"lomin", String(self->lon - self->rad)},
+              {"lomax", String(self->lon + self->rad)}
             },
             headers
         );
 
-        // If request failed, skip this update
-        if (!result.success) {
-            Serial.print("[WARN] OpenSky API request failed: ");
-            Serial.println(result.errorMessage);
-            return;
-        }
+        if (!result.success) continue;
 
-        // track
         JsonDocument doc;
         deserializeJson(doc, result.response);
         auto aircraft = JsonParser::ParseArray<Aircraft>(doc["states"]);
-        now = millis(); // override with post-parse timestamp
+        unsigned long now = millis();
 
+        // update local tracked aircraft
         for (auto& ac : aircraft) {
-            auto it = trackedAircraft.find(ac.icao24);
-            if (it == trackedAircraft.end())
-                trackedAircraft.emplace(ac.icao24, TrackedAircraft{ ac, now });
+            auto it = localAircraft.find(ac.icao24);
+            if (it == localAircraft.end())
+                localAircraft.emplace(ac.icao24, TrackedAircraft{ ac, now });
             else
                 it->second.Update(ac, now);
         }
 
-        // remove any planes that disappeared from the feed
-        for (auto it = trackedAircraft.begin(); it != trackedAircraft.end(); ) {
-            bool aircraftPresent = std::any_of(aircraft.begin(), aircraft.end(), [&](const Aircraft& ac) { return ac.icao24 == it->first; });
-            if (!aircraftPresent)
-                it = trackedAircraft.erase(it);
+        // remove disappeared planes
+        for (auto it = localAircraft.begin(); it != localAircraft.end(); ) {
+            bool present = std::any_of(aircraft.begin(), aircraft.end(),
+                [&](const Aircraft& ac) { return ac.icao24 == it->first; });
+            if (!present)
+                it = localAircraft.erase(it);
             else
                 ++it;
         }
 
-    }
+        // fetch one route per plane that needs it
+        constexpr unsigned long RETRY_INTERVAL = 300000;
+        for (auto& [icao, tracked] : localAircraft) {
+            auto it = localRoutes.find(icao);
+            if (it != localRoutes.end()) {
+                if (it->second.route.length() > 0) continue;
+                if (now - it->second.fetchedAt < RETRY_INTERVAL) continue;
+            }
 
-    FetchRoutes();
+            String callsign = tracked.state.callsign;
+            callsign.trim();
+            if (callsign.isEmpty()) {
+                localRoutes[icao] = { "", now };
+                continue;
+            }
+
+            String prefix = callsign.substring(0, 2);
+            String url = "https://vrs-standing-data.adsb.lol/routes/" + prefix + "/" + callsign + ".json";
+
+            HttpResult routeResult = self->http.Get(url, {}, {});
+
+            if (routeResult.success && routeResult.statusCode == 200) {
+                JsonDocument rdoc;
+                deserializeJson(rdoc, routeResult.response);
+                String iata = rdoc["_airport_codes_iata"] | "";
+                if (iata.length() > 0) {
+                    JsonArray airports = rdoc["_airports"];
+                    if (airports.size() >= 2) {
+                        float originLat = airports[0]["lat"] | 0.0f;
+                        float originLon = airports[0]["lon"] | 0.0f;
+                        float destLat = airports[airports.size() - 1]["lat"] | 0.0f;
+                        float destLon = airports[airports.size() - 1]["lon"] | 0.0f;
+
+                        float headingRad = radians(tracked.state.trueTrack);
+                        float hdgX = sin(headingRad);
+                        float hdgY = cos(headingRad);
+
+                        float toOriginX = originLon - tracked.state.longitude;
+                        float toOriginY = originLat - tracked.state.latitude;
+                        float toDestX = destLon - tracked.state.longitude;
+                        float toDestY = destLat - tracked.state.latitude;
+
+                        float dotOrigin = hdgX * toOriginX + hdgY * toOriginY;
+                        float dotDest = hdgX * toDestX + hdgY * toDestY;
+
+                        int sep = iata.indexOf('-');
+                        String from = iata.substring(0, sep);
+                        String to = iata.substring(sep + 1);
+
+                        if (dotOrigin > dotDest)
+                            localRoutes[icao] = { to + ">" + from, now };
+                        else
+                            localRoutes[icao] = { from + ">" + to, now };
+                    } else {
+                        iata.replace("-", ">");
+                        localRoutes[icao] = { iata, now };
+                    }
+                } else {
+                    localRoutes[icao] = { "", now };
+                }
+            } else {
+                localRoutes[icao] = { "", now };
+            }
+        }
+
+        // stage results for main loop to pick up
+        xSemaphoreTake(self->dataMutex, portMAX_DELAY);
+        self->stagedAircraft = localAircraft;
+        self->stagedRoutes = localRoutes;
+        self->newDataReady = true;
+        xSemaphoreGive(self->dataMutex);
+    }
 }
 
-void AircraftManager::Draw(LGFX_Sprite& backbuffer)
+void AircraftManager::Draw(LGFX_Sprite& backbuffer, float sweepAngle)
 {
     DrawRadarCircles(backbuffer);
 
@@ -115,6 +207,28 @@ void AircraftManager::Draw(LGFX_Sprite& backbuffer)
         uint32_t color = IsMilitary(tracked)
             ? lgfx::color888(0, 100, 255)
             : GetProximityColor(tracked);
+
+        // pulse ring: expands and fades after sweep hits
+        float pdx = x - (SCREEN_SIZE_DIV_2 - 1);
+        float pdy = y - (SCREEN_SIZE_DIV_2 - 1);
+        float planeAngle = atan2(pdy, pdx);
+        if (planeAngle < 0) planeAngle += 2.0f * PI;
+
+        float angleDiff = (sweepAngle + 0.5f) - planeAngle;
+        if (angleDiff < 0) angleDiff += 2.0f * PI;
+        if (angleDiff > 2.0f * PI) angleDiff -= 2.0f * PI;
+
+        if (angleDiff < 1.2f) {
+            float t = angleDiff / 1.2f;
+            int radius = 4 + (int)(t * 14);
+            uint8_t alpha = (uint8_t)((1.0f - t) * 255);
+            backbuffer.drawCircle(x, y, radius, lgfx::color888(0, alpha, 0));
+            backbuffer.drawCircle(x, y, radius - 1, lgfx::color888(0, alpha / 2, 0));
+
+            if (angleDiff < 0.2f) {
+                DrawAircraftTriangle(backbuffer, x, y, tracked, lgfx::color888(255, 255, 255), 1.3f);
+            }
+        }
 
         if (displayInfoText)
             DrawAircraftInfo(backbuffer, x, y, tracked);
@@ -146,18 +260,78 @@ void AircraftManager::DrawRadarCircles(LGFX_Sprite& backbuffer) const
     backbuffer.drawCircle(CENTRE, CENTRE, OUTER, lgfx::color888(0, 200, 0));
     backbuffer.drawCircle(CENTRE, CENTRE, (OUTER / 3) * 2, lgfx::color888(0, 64, 0));
     backbuffer.drawCircle(CENTRE, CENTRE, OUTER / 3, lgfx::color888(0, 32, 0));
+
+    // compass labels
+    float angle = radians(screenRotation);
+    float cosA = cos(angle);
+    float sinA = sin(angle);
+
+    struct Compass { const char* label; float dx; float dy; };
+    Compass points[] = {
+        { "N",  0.0f, -1.0f },
+        { "S",  0.0f,  1.0f },
+        { "E",  1.0f,  0.0f },
+        { "W", -1.0f,  0.0f },
+    };
+
+    backbuffer.setTextSize(1);
+    backbuffer.setTextColor(lgfx::color888(0, 150, 0));
+    for (auto& p : points) {
+        float rx = p.dx * cosA - p.dy * sinA;
+        float ry = p.dx * sinA + p.dy * cosA;
+        int px = CENTRE + (int)(rx * (OUTER - 8));
+        int py = CENTRE + (int)(ry * (OUTER - 8));
+        backbuffer.drawCentreString(p.label, px, py - tft.fontHeight() / 2, 1);
+    }
+
+    if (displayRangeLabels) {
+        float fullDistKm = rad * 111.32f;
+        backbuffer.setTextSize(1);
+        backbuffer.setTextColor(lgfx::color888(0, 64, 0));
+
+        float angle = radians(screenRotation);
+        float cosA = cos(angle);
+        float sinA = sin(angle);
+
+        for (int i = 1; i <= 2; i++) {
+            float distKm = fullDistKm * i / 3.0f;
+            String label;
+            if (useMetricUnits)
+                label = String((int)distKm) + " km";
+            else
+                label = String((int)(distKm * 0.6214f)) + " mi";
+
+            int ringR = OUTER * i / 3;
+            float lx = 2.0f;
+            float ly = (float)ringR;
+            float rx = lx * cosA - ly * sinA;
+            float ry = lx * sinA + ly * cosA;
+            backbuffer.drawString(label, CENTRE + (int)rx, CENTRE + (int)ry - tft.fontHeight());
+        }
+    }
 }
 
 std::pair<int, int> AircraftManager::ProjectCoordinateToScreen(float predLat, float predLon) const
 {
-    const float dLon = predLon - lon;
+    const float lonScale = cos(radians(lat));
+    const float dLon = (predLon - lon) * lonScale;
     const float dLat = predLat - lat;
 
-    const float normLon = (dLon + rad) / (2.0f * rad);
-    const float normLat = (dLat + rad) / (2.0f * rad);
+    float normX = dLon / rad;
+    float normY = -dLat / rad;
 
-    const int x = static_cast<int>(normLon * SCREEN_SIZE);
-    const int y = static_cast<int>(SCREEN_SIZE - (normLat * SCREEN_SIZE));
+    if (screenRotation != 0.0f) {
+        float angle = radians(screenRotation);
+        float cosA = cos(angle);
+        float sinA = sin(angle);
+        float rx = normX * cosA - normY * sinA;
+        float ry = normX * sinA + normY * cosA;
+        normX = rx;
+        normY = ry;
+    }
+
+    const int x = static_cast<int>((normX + 1.0f) * 0.5f * SCREEN_SIZE);
+    const int y = static_cast<int>((normY + 1.0f) * 0.5f * SCREEN_SIZE);
 
     return { x, y };
 }
@@ -194,13 +368,14 @@ void AircraftManager::DrawAircraftInfo(LGFX_Sprite& backbuffer, int x, int y, co
     }
 }
 
-void AircraftManager::DrawAircraftTriangle(LGFX_Sprite& backbuffer, int x, int y, const TrackedAircraft& tracked, uint32_t color) const
+void AircraftManager::DrawAircraftTriangle(LGFX_Sprite& backbuffer, int x, int y, const TrackedAircraft& tracked, uint32_t color, float scaleOverride) const
 {
     float altFactor = 1.0f;
     if (useAltitudeScaling) {
         altFactor = 1.6f - (tracked.state.baroAltitude / 12000.0f) * 0.9f;
         altFactor = max(0.7f, min(1.6f, altFactor));
     }
+    if (scaleOverride > 0.0f) altFactor *= scaleOverride;
 
     const float angle = radians(tracked.state.trueTrack);
     const float cosA = std::cos(angle);
@@ -317,75 +492,4 @@ uint32_t AircraftManager::GetProximityColor(const TrackedAircraft& tracked) cons
     return lgfx::color888(0, 255, 0);          // green (default)
 }
 
-void AircraftManager::FetchRoutes()
-{
-    constexpr unsigned long RETRY_INTERVAL = 300000;
-    unsigned long now = millis();
-
-    for (auto& [icao, tracked] : trackedAircraft) {
-        auto it = routeCache.find(icao);
-        if (it != routeCache.end()) {
-            if (it->second.route.length() > 0) continue;
-            if (now - it->second.fetchedAt < RETRY_INTERVAL) continue;
-        }
-
-        String callsign = tracked.state.callsign;
-        callsign.trim();
-        if (callsign.isEmpty()) {
-            routeCache[icao] = { "", now };
-            continue;
-        }
-
-        // only one HTTP request per loop to avoid blocking the display
-        String prefix = callsign.substring(0, 2);
-        String url = "https://vrs-standing-data.adsb.lol/routes/" + prefix + "/" + callsign + ".json";
-
-        HttpResult result = http.Get(url, {}, {});
-
-        if (result.success && result.statusCode == 200) {
-            JsonDocument doc;
-            deserializeJson(doc, result.response);
-            String iata = doc["_airport_codes_iata"] | "";
-            if (iata.length() > 0) {
-                JsonArray airports = doc["_airports"];
-                if (airports.size() >= 2) {
-                    float originLat = airports[0]["lat"] | 0.0f;
-                    float originLon = airports[0]["lon"] | 0.0f;
-                    float destLat = airports[airports.size() - 1]["lat"] | 0.0f;
-                    float destLon = airports[airports.size() - 1]["lon"] | 0.0f;
-
-                    float headingRad = radians(tracked.state.trueTrack);
-                    float hdgX = sin(headingRad);
-                    float hdgY = cos(headingRad);
-
-                    float toOriginX = originLon - tracked.state.longitude;
-                    float toOriginY = originLat - tracked.state.latitude;
-                    float toDestX = destLon - tracked.state.longitude;
-                    float toDestY = destLat - tracked.state.latitude;
-
-                    float dotOrigin = hdgX * toOriginX + hdgY * toOriginY;
-                    float dotDest = hdgX * toDestX + hdgY * toDestY;
-
-                    int sep = iata.indexOf('-');
-                    String from = iata.substring(0, sep);
-                    String to = iata.substring(sep + 1);
-
-                    if (dotOrigin > dotDest)
-                        routeCache[icao] = { to + ">" + from, now };
-                    else
-                        routeCache[icao] = { from + ">" + to, now };
-                } else {
-                    iata.replace("-", ">");
-                    routeCache[icao] = { iata, now };
-                }
-            } else {
-                routeCache[icao] = { "", now };
-            }
-        } else {
-            routeCache[icao] = { "", now };
-        }
-
-        return; // fetch only one per loop cycle
-    }
-}
 
