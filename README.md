@@ -5,7 +5,7 @@
   a tiny open-source flight radar for your desk
 </h6>
 <p align=center>
-  <img src="£Dradar.png" alt="micro radar v2" width="400"/>
+  <img src="radar%20latest.png" alt="micro radar v2" width="400"/>
 </p>
 <p align=center>
   <a href="#prerequisites">PREREQUISITES</a> - <a href="#assembly">ASSEMBLY</a> - <a href="#usage">USAGE</a> - <a href="#faq">FAQ</a>
