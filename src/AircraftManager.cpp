@@ -392,9 +392,13 @@ void AircraftManager::DrawAircraftTriangle(LGFX_Sprite& backbuffer, int x, int y
     }
     if (scaleOverride > 0.0f) altFactor *= scaleOverride;
 
-    const float angle = radians(tracked.state.trueTrack);
-    const float cosA = std::cos(angle);
-    const float sinA = std::sin(angle);
+    // adjust heading for longitude scaling so chevron points in screen-space direction
+    const float lonScale = cos(radians(lat));
+    float hdgRad = radians(tracked.state.trueTrack);
+    float screenAngle = atan2(sin(hdgRad) * lonScale, cos(hdgRad));
+    if (screenRotation != 0.0f) screenAngle += radians(screenRotation);
+    const float cosA = std::cos(screenAngle);
+    const float sinA = std::sin(screenAngle);
 
     struct Pt { float lx, ly; };
     const Pt nose  = {  0.0f, -5.0f * altFactor };
@@ -414,6 +418,11 @@ void AircraftManager::DrawAircraftTriangle(LGFX_Sprite& backbuffer, int x, int y
 
     backbuffer.fillTriangle(nx, ny, wlx, wly, tx, ty, color);
     backbuffer.fillTriangle(nx, ny, wrx, wry, tx, ty, color);
+    // anti-aliased edges for smoother appearance
+    backbuffer.drawWideLine(nx, ny, wlx, wly, 0.5f, color);
+    backbuffer.drawWideLine(nx, ny, wrx, wry, 0.5f, color);
+    backbuffer.drawWideLine(wlx, wly, tx, ty, 0.5f, color);
+    backbuffer.drawWideLine(wrx, wry, tx, ty, 0.5f, color);
 }
 
 float AircraftManager::DistanceBetweenAircraft(const TrackedAircraft& a, const TrackedAircraft& b) const
