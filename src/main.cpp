@@ -56,6 +56,11 @@ void setup()
 
 void loop()
 {
+  // reboot if heap is critically low (prevents silent crashes from fragmentation)
+  if (ESP.getFreeHeap() < 20000) {
+    ESP.restart();
+  }
+
   aircraftManager.Update();
 
   // draw cycle

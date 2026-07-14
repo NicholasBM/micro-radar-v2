@@ -119,6 +119,14 @@ void AircraftManager::NetworkTaskFunc(void* param)
                 ++it;
         }
 
+        // clean stale routes for planes no longer tracked
+        for (auto it = localRoutes.begin(); it != localRoutes.end(); ) {
+            if (localAircraft.find(it->first) == localAircraft.end())
+                it = localRoutes.erase(it);
+            else
+                ++it;
+        }
+
         // fetch one route per plane that needs it
         constexpr unsigned long RETRY_INTERVAL = 300000;
         for (auto& [icao, tracked] : localAircraft) {
@@ -214,7 +222,7 @@ void AircraftManager::Draw(LGFX_Sprite& backbuffer, float sweepAngle)
         float planeAngle = atan2(pdy, pdx);
         if (planeAngle < 0) planeAngle += 2.0f * PI;
 
-        float angleDiff = (sweepAngle + 0.5f) - planeAngle;
+        float angleDiff = (sweepAngle + 0.2f) - planeAngle;
         if (angleDiff < 0) angleDiff += 2.0f * PI;
         if (angleDiff > 2.0f * PI) angleDiff -= 2.0f * PI;
 
