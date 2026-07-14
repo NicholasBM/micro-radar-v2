@@ -93,12 +93,19 @@ void AircraftManager::NetworkTaskFunc(void* param)
             headers
         );
 
-        if (!result.success || result.statusCode != 200) continue;
+        if (!result.success || result.statusCode != 200) {
+            Serial.print("[NET] Fetch failed: ");
+            Serial.println(result.success ? String(result.statusCode) : result.errorMessage);
+            continue;
+        }
 
         JsonDocument doc;
         deserializeJson(doc, result.response);
         auto aircraft = JsonParser::ParseArray<Aircraft>(doc["states"]);
         unsigned long now = millis();
+
+        Serial.print("[NET] OK, planes: ");
+        Serial.println(aircraft.size());
 
         // update local tracked aircraft
         for (auto& ac : aircraft) {
