@@ -40,6 +40,8 @@ private:
     float screenRotation = 0.0f;
 
     unsigned long fetchInterval = 0;
+    String openskyId;
+    String openskySecret;
 
     ConfigurationWebServer& configServer;
     OpenSkyAuthTokenHandler& authHandler;
@@ -53,6 +55,7 @@ private:
     void DrawSquawkAlert(LGFX_Sprite& backbuffer, int x, int y, const TrackedAircraft& tracked) const;
     uint32_t GetProximityColor(const TrackedAircraft& tracked) const;
     bool IsMilitary(const TrackedAircraft& tracked) const;
+    bool IsHelicopter(const TrackedAircraft& tracked) const;
     float DistanceBetweenAircraft(const TrackedAircraft& a, const TrackedAircraft& b) const;
 
     static void NetworkTaskFunc(void* param);

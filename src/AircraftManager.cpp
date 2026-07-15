@@ -34,7 +34,9 @@ void AircraftManager::Initialise()
     constexpr int TOKEN_BUFFER = 3;
     int dailyRequestBudget = ANONYMOUS_TOKENS_PER_DAY - TOKEN_BUFFER;
 
-    const String token = authHandler.GetValidToken(configServer.GetStoredString("opensky-id"), configServer.GetStoredString("opensky-secret"));
+    openskyId = configServer.GetStoredString("opensky-id");
+    openskySecret = configServer.GetStoredString("opensky-secret");
+    const String token = authHandler.GetValidToken(openskyId, openskySecret);
     if (!token.isEmpty())
         dailyRequestBudget = AUTHED_TOKENS_PER_DAY - TOKEN_BUFFER;
 
@@ -47,9 +49,26 @@ void AircraftManager::Initialise()
 
 void AircraftManager::Update()
 {
-    // swap in new data from background task if available
+    // merge new data from background task if available
     if (newDataReady && xSemaphoreTake(dataMutex, 0) == pdTRUE) {
-        trackedAircraft = stagedAircraft;
+        unsigned long now = millis();
+
+        for (auto& [icao, staged] : stagedAircraft) {
+            auto it = trackedAircraft.find(icao);
+            if (it == trackedAircraft.end())
+                trackedAircraft.emplace(icao, TrackedAircraft{ staged.state, now });
+            else
+                it->second.Update(staged.state, now);
+        }
+
+        // remove planes no longer in staged data
+        for (auto it = trackedAircraft.begin(); it != trackedAircraft.end(); ) {
+            if (stagedAircraft.find(it->first) == stagedAircraft.end())
+                it = trackedAircraft.erase(it);
+            else
+                ++it;
+        }
+
         routeCache = stagedRoutes;
         newDataReady = false;
         xSemaphoreGive(dataMutex);
@@ -74,8 +93,8 @@ void AircraftManager::NetworkTaskFunc(void* param)
 
         // auth
         const String token = self->authHandler.GetValidToken(
-            self->configServer.GetStoredString("opensky-id"),
-            self->configServer.GetStoredString("opensky-secret")
+            self->openskyId,
+            self->openskySecret
         );
 
         std::vector<std::pair<String, String>> headers = {};
@@ -219,7 +238,7 @@ void AircraftManager::Draw(LGFX_Sprite& backbuffer, float sweepAngle)
         auto [predLat, predLon] = tracked.GetDisplayPosition();
         auto [x, y] = ProjectCoordinateToScreen(predLat, predLon);
 
-        uint32_t color = IsMilitary(tracked)
+        uint32_t color = (IsMilitary(tracked) && !IsHelicopter(tracked))
             ? lgfx::color888(0, 100, 255)
             : GetProximityColor(tracked);
 
@@ -241,14 +260,17 @@ void AircraftManager::Draw(LGFX_Sprite& backbuffer, float sweepAngle)
             backbuffer.drawCircle(x, y, radius - 1, lgfx::color888(0, alpha / 2, 0));
 
             if (angleDiff < 0.2f) {
-                DrawAircraftTriangle(backbuffer, x, y, tracked, lgfx::color888(255, 255, 255), 1.3f);
+                if (tracked.state.category == 7 || IsHelicopter(tracked))
+                    backbuffer.fillCircle(x, y, 3, lgfx::color888(255, 255, 255));
+                else
+                    DrawAircraftTriangle(backbuffer, x, y, tracked, lgfx::color888(255, 255, 255), 1.3f);
             }
         }
 
         if (displayInfoText)
             DrawAircraftInfo(backbuffer, x, y, tracked);
 
-        if (tracked.state.category == 7) {
+        if (tracked.state.category == 7 || IsHelicopter(tracked)) {
             float altFactor = 1.0f;
             if (useAltitudeScaling) {
                 altFactor = 1.6f - (tracked.state.baroAltitude / 12000.0f) * 0.9f;
@@ -418,11 +440,6 @@ void AircraftManager::DrawAircraftTriangle(LGFX_Sprite& backbuffer, int x, int y
 
     backbuffer.fillTriangle(nx, ny, wlx, wly, tx, ty, color);
     backbuffer.fillTriangle(nx, ny, wrx, wry, tx, ty, color);
-    // anti-aliased edges for smoother appearance
-    backbuffer.drawWideLine(nx, ny, wlx, wly, 0.5f, color);
-    backbuffer.drawWideLine(nx, ny, wrx, wry, 0.5f, color);
-    backbuffer.drawWideLine(wlx, wly, tx, ty, 0.5f, color);
-    backbuffer.drawWideLine(wrx, wry, tx, ty, 0.5f, color);
 }
 
 float AircraftManager::DistanceBetweenAircraft(const TrackedAircraft& a, const TrackedAircraft& b) const
@@ -459,6 +476,14 @@ void AircraftManager::DrawSquawkAlert(LGFX_Sprite& backbuffer, int x, int y, con
 
 bool AircraftManager::IsMilitary(const TrackedAircraft& tracked) const
 {
+    // check ICAO hex range for military blocks
+    unsigned long icaoHex = strtoul(tracked.state.icao24.c_str(), nullptr, 16);
+    if (icaoHex >= 0x43C000 && icaoHex <= 0x43CFFF) return true;  // UK military
+    if (icaoHex >= 0x3F8000 && icaoHex <= 0x3FBFFF) return true;  // France military
+    if (icaoHex >= 0x3F4000 && icaoHex <= 0x3F7FFF) return true;  // Germany military
+    if (icaoHex >= 0xADF7C8 && icaoHex <= 0xAFFFFF) return true;  // US military
+
+    // check callsign prefix
     String callsign = tracked.state.callsign;
     callsign.trim();
     if (callsign.isEmpty()) return false;
@@ -472,18 +497,44 @@ bool AircraftManager::IsMilitary(const TrackedAircraft& tracked) const
         "BAF",   // Belgian Air Force
         "NAF",   // Netherlands Air Force
         "DAF",   // Danish Air Force
-        "NAF",   // Norwegian Air Force
         "SVF",   // Swedish Air Force
         "FAF",   // Finnish Air Force
         "PLF",   // Polish Air Force
         "HUF",   // Hungarian Air Force
         "CFR",   // Canadian Forces
         "RCH",   // US Air Mobility Command
-        "EVIL",  // US Air Force callsign
+        "EVIL",  // US Air Force
         "DUKE",  // US Air Force
         "REACH", // US Air Mobility Command
         "NATO",  // NATO
         "ASCOT", // RAF transport
+    };
+
+    for (const char* prefix : prefixes) {
+        if (callsign.startsWith(prefix))
+            return true;
+    }
+
+    return false;
+}
+
+bool AircraftManager::IsHelicopter(const TrackedAircraft& tracked) const
+{
+    String callsign = tracked.state.callsign;
+    callsign.trim();
+    if (callsign.isEmpty()) return false;
+
+    static const char* prefixes[] = {
+        "SYS",     // Police/NPAS helicopters
+        "HLE",     // NPAS helicopters
+        "NPAS",    // National Police Air Service
+        "HELIMED", // Air Ambulance
+        "HEM",     // HEMS (Helicopter Emergency Medical)
+        "RESCUE",  // Search and rescue
+        "COAST",   // Coastguard
+        "CGRD",    // Coastguard
+        "SAR",     // Search and rescue
+        "LIFE",    // Air ambulance
     };
 
     for (const char* prefix : prefixes) {
