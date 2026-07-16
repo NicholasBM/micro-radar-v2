@@ -16,13 +16,16 @@ void AircraftManager::Initialise()
     // configuration
     const String renderText = configServer.GetStoredString("infotext");
     const String renderTris = configServer.GetStoredString("triangle");
-    const String units = configServer.GetStoredString("units");
+    const String unitsStr = configServer.GetStoredString("units");
     const String altSize = configServer.GetStoredString("altsize");
     if (!renderText.isEmpty()) displayInfoText = renderText == "true" ? true : false;
     if (!renderTris.isEmpty()) displayTriangles = renderTris == "true" ? true : false;
     const String rangeLabels = configServer.GetStoredString("rangelabels");
-    if (!units.isEmpty()) useMetricUnits = units == "metric";
+    if (unitsStr == "metric") units = METRIC;
+    else if (unitsStr == "aviation") units = AVIATION;
+    const String pingEffect = configServer.GetStoredString("ping");
     if (!altSize.isEmpty()) useAltitudeScaling = altSize == "true";
+    if (!pingEffect.isEmpty()) displayPingEffect = pingEffect == "true";
     const String rotation = configServer.GetStoredString("rotation");
     if (!rangeLabels.isEmpty()) displayRangeLabels = rangeLabels == "true";
     if (!rotation.isEmpty()) screenRotation = rotation.toFloat();
@@ -55,10 +58,12 @@ void AircraftManager::Update()
 
         for (auto& [icao, staged] : stagedAircraft) {
             auto it = trackedAircraft.find(icao);
-            if (it == trackedAircraft.end())
+            if (it == trackedAircraft.end()) {
                 trackedAircraft.emplace(icao, TrackedAircraft{ staged.state, now });
-            else
+                stats.totalPlanesTracked++;
+            } else {
                 it->second.Update(staged.state, now);
+            }
         }
 
         // remove planes no longer in staged data
@@ -67,6 +72,53 @@ void AircraftManager::Update()
                 it = trackedAircraft.erase(it);
             else
                 ++it;
+        }
+
+        // update stats
+        int airborneCount = 0;
+        for (auto& [icao, tracked] : trackedAircraft) {
+            if (tracked.state.onGround) continue;
+            airborneCount++;
+
+            if (IsMilitary(tracked) && !IsHelicopter(tracked)) {
+                String cs = tracked.state.callsign;
+                cs.trim();
+                if (cs != stats.lastMilitaryCallsign && !cs.isEmpty()) {
+                    stats.militaryCount++;
+                    stats.lastMilitaryCallsign = cs;
+                }
+            }
+
+            if (tracked.state.squawk == "7700" || tracked.state.squawk == "7600" || tracked.state.squawk == "7500") {
+                String cs = tracked.state.callsign;
+                cs.trim();
+                if (cs != stats.lastEmergencyCallsign) {
+                    stats.emergencyCount++;
+                    stats.lastEmergencyCallsign = cs;
+                    stats.lastEmergencySquawk = tracked.state.squawk;
+                }
+            }
+        }
+
+        if (airborneCount > stats.peakPlanes) {
+            stats.peakPlanes = airborneCount;
+            stats.peakTime = now;
+        }
+
+        // check closest proximity
+        for (auto& [icao1, t1] : trackedAircraft) {
+            if (t1.state.onGround) continue;
+            for (auto& [icao2, t2] : trackedAircraft) {
+                if (icao1 >= icao2 || t2.state.onGround) continue;
+                float dist = DistanceBetweenAircraft(t1, t2);
+                if (dist < stats.closestProximity) {
+                    stats.closestProximity = dist;
+                    String cs1 = t1.state.callsign; cs1.trim();
+                    String cs2 = t2.state.callsign; cs2.trim();
+                    stats.closestPair1 = cs1.isEmpty() ? icao1 : cs1;
+                    stats.closestPair2 = cs2.isEmpty() ? icao2 : cs2;
+                }
+            }
         }
 
         routeCache = stagedRoutes;
@@ -252,7 +304,7 @@ void AircraftManager::Draw(LGFX_Sprite& backbuffer, float sweepAngle)
         if (angleDiff < 0) angleDiff += 2.0f * PI;
         if (angleDiff > 2.0f * PI) angleDiff -= 2.0f * PI;
 
-        if (angleDiff < 1.2f) {
+        if (displayPingEffect && angleDiff < 1.2f) {
             float t = angleDiff / 1.2f;
             int radius = 4 + (int)(t * 14);
             uint8_t alpha = (uint8_t)((1.0f - t) * 255);
@@ -333,8 +385,10 @@ void AircraftManager::DrawRadarCircles(LGFX_Sprite& backbuffer) const
         for (int i = 1; i <= 2; i++) {
             float distKm = fullDistKm * i / 3.0f;
             String label;
-            if (useMetricUnits)
+            if (units == METRIC)
                 label = String((int)distKm) + " km";
+            else if (units == AVIATION)
+                label = String((int)(distKm * 0.5400f)) + " nm";
             else
                 label = String((int)(distKm * 0.6214f)) + " mi";
 
@@ -390,12 +444,18 @@ void AircraftManager::DrawAircraftInfo(LGFX_Sprite& backbuffer, int x, int y, co
     }
 
     int speed, alt;
-    if (useMetricUnits) {
+    if (units == METRIC) {
         speed = (int)(tracked.state.velocity * 3.6f);
         alt = max(0, (int)tracked.state.baroAltitude);
         backbuffer.drawString(String(speed) + " km/h", x + 5, y + 5 + lineHeight * line);
         line++;
         backbuffer.drawString(String(alt) + " m", x + 5, y + 5 + lineHeight * line);
+    } else if (units == AVIATION) {
+        speed = (int)(tracked.state.velocity * 1.944f);
+        alt = max(0, (int)(tracked.state.baroAltitude * 3.281f));
+        backbuffer.drawString(String(speed) + " kt", x + 5, y + 5 + lineHeight * line);
+        line++;
+        backbuffer.drawString("FL" + String(alt / 100), x + 5, y + 5 + lineHeight * line);
     } else {
         speed = (int)(tracked.state.velocity * 2.237f);
         alt = max(0, (int)(tracked.state.baroAltitude * 3.281f));
@@ -508,6 +568,14 @@ bool AircraftManager::IsMilitary(const TrackedAircraft& tracked) const
         "REACH", // US Air Mobility Command
         "NATO",  // NATO
         "ASCOT", // RAF transport
+        "CKTL",  // RAF training (civilian-registered)
+        "PRF",   // RAF training
+        "TOPCAT",// UK military
+        "LOSSIE",// RAF Lossiemouth
+        "VIPER", // UK military
+        "TANGO", // UK military
+        "CHAOS", // UK military
+        "BLAZE", // UK military
     };
 
     for (const char* prefix : prefixes) {

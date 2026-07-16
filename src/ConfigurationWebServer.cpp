@@ -14,6 +14,15 @@ static const char CONFIG_HTML[] PROGMEM = R"(
         <fieldset class="border border-green-500 p-5 w-full max-w-2xl mx-auto sm:m-10">
             <legend class="px-2">Configure Micro Radar</legend>
 
+            <div class="mb-4 p-3 border border-green-800 text-sm">
+                <div class="text-green-400 mb-2 font-bold">Stats (since last reboot)</div>
+                <div>Planes tracked: %STAT_TOTAL%</div>
+                <div>Peak simultaneous: %STAT_PEAK% (at %STAT_PEAK_TIME%)</div>
+                <div>Military spotted: %STAT_MILITARY% %STAT_LAST_MIL%</div>
+                <div>Emergencies: %STAT_EMERGENCY% %STAT_LAST_EMER%</div>
+                <div>Closest pass: %STAT_CLOSEST%</div>
+            </div>
+
             <form id="cfg" action="/save" method="POST" class="flex flex-col gap-4 sm:gap-2">
 
                 <div class="flex flex-col sm:flex-row gap-4 sm:gap-5">
@@ -100,6 +109,7 @@ static const char CONFIG_HTML[] PROGMEM = R"(
                         <select name="units" class="px-3 sm:px-1 bg-black text-green-500 border border-green-500">
                             <option value="imperial" %UNITS_IMPERIAL%>Imperial (mph / ft)</option>
                             <option value="metric" %UNITS_METRIC%>Metric (km/h / m)</option>
+                            <option value="aviation" %UNITS_AVIATION%>Aviation (kt / FL)</option>
                         </select>
                     </label>
                     <label class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
@@ -108,6 +118,14 @@ static const char CONFIG_HTML[] PROGMEM = R"(
                             name="altsize"
                             type="checkbox"
                             %ALTSIZE%
+                            class="px-3 sm:px-1 accent-green-500">
+                    </label>
+                    <label class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                        <span>Radar Ping:</span>
+                        <input
+                            name="ping"
+                            type="checkbox"
+                            %PING%
                             class="px-3 sm:px-1 accent-green-500">
                     </label>
                     <label class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
@@ -177,6 +195,7 @@ void ConfigurationWebServer::Initialise() {
         const String triangleEnabled = prefs.getString("triangle", "true");
         const String unitsValue = prefs.getString("units", "imperial");
         const String altSizeEnabled = prefs.getString("altsize", "true");
+        const String pingEnabled = prefs.getString("ping", "true");
         const String rangeLabelsEnabled = prefs.getString("rangelabels", "true");
         const String rotationValue = prefs.getString("rotation", "0");
         prefs.end();
@@ -188,8 +207,9 @@ void ConfigurationWebServer::Initialise() {
         AsyncWebServerResponse* response = request->beginResponse(
             200, "text/html",
             (const uint8_t*)CONFIG_HTML, sizeof(CONFIG_HTML) - 1,
-            [latitude, longitude, radius, openskyClientId, openskySecret, scanlineEnabled, infoTextEnabled, triangleEnabled, unitsValue, altSizeEnabled, rangeLabelsEnabled, rotationValue]
+            [this, latitude, longitude, radius, openskyClientId, openskySecret, scanlineEnabled, infoTextEnabled, triangleEnabled, unitsValue, altSizeEnabled, pingEnabled, rangeLabelsEnabled, rotationValue]
             (const String& var) -> String {
+                if (var.startsWith("STAT_") && statsProvider) return statsProvider(var);
                 if (var == "LATITUDE")       return latitude;
                 if (var == "LONGITUDE")      return longitude;
                 if (var == "RADIUS")         return radius;
@@ -198,9 +218,11 @@ void ConfigurationWebServer::Initialise() {
                 if (var == "SCANLINE")       return scanlineEnabled == "true" ? "checked" : "";
                 if (var == "INFOTEXT")       return infoTextEnabled == "true" ? "checked" : "";
                 if (var == "TRIANGLE")       return triangleEnabled == "true" ? "checked" : "";
-                if (var == "UNITS_IMPERIAL") return unitsValue == "metric" ? "" : "selected";
+                if (var == "UNITS_IMPERIAL") return (unitsValue != "metric" && unitsValue != "aviation") ? "selected" : "";
                 if (var == "UNITS_METRIC")   return unitsValue == "metric" ? "selected" : "";
+                if (var == "UNITS_AVIATION") return unitsValue == "aviation" ? "selected" : "";
                 if (var == "ALTSIZE")        return altSizeEnabled == "true" ? "checked" : "";
+                if (var == "PING")          return pingEnabled == "true" ? "checked" : "";
                 if (var == "RANGELABELS")   return rangeLabelsEnabled == "true" ? "checked" : "";
                 if (var == "ROTATION")      return rotationValue;
                 return "";
@@ -243,6 +265,7 @@ void ConfigurationWebServer::Initialise() {
         prefs.putString("triangle", request->hasParam("triangle", true) ? "true" : "false");
         prefs.putString("infotext", request->hasParam("infotext", true) ? "true" : "false");
         prefs.putString("altsize", request->hasParam("altsize", true) ? "true" : "false");
+        prefs.putString("ping", request->hasParam("ping", true) ? "true" : "false");
         prefs.putString("rangelabels", request->hasParam("rangelabels", true) ? "true" : "false");
         TrySaveParam("units");
         TrySaveParam("rotation");

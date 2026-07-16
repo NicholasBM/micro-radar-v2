@@ -34,14 +34,31 @@ private:
 
     bool displayInfoText = true;
     bool displayTriangles = true;
-    bool useMetricUnits = false;
+    enum Units { IMPERIAL, METRIC, AVIATION };
+    Units units = IMPERIAL;
     bool useAltitudeScaling = true;
     bool displayRangeLabels = true;
+    bool displayPingEffect = true;
     float screenRotation = 0.0f;
 
     unsigned long fetchInterval = 0;
     String openskyId;
     String openskySecret;
+
+    // stats (since last reboot)
+    struct Stats {
+        int totalPlanesTracked = 0;
+        int militaryCount = 0;
+        String lastMilitaryCallsign;
+        int emergencyCount = 0;
+        String lastEmergencyCallsign;
+        String lastEmergencySquawk;
+        float closestProximity = 999999.0f;
+        String closestPair1;
+        String closestPair2;
+        int peakPlanes = 0;
+        unsigned long peakTime = 0;
+    } stats;
 
     ConfigurationWebServer& configServer;
     OpenSkyAuthTokenHandler& authHandler;
@@ -70,4 +87,5 @@ public:
     void Initialise();
     void Update();
     void Draw(LGFX_Sprite& backbuffer, float sweepAngle);
+    const Stats& GetStats() const { return stats; }
 };
