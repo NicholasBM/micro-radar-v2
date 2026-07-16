@@ -260,15 +260,22 @@ The route database stores a fixed direction per callsign. We use the aircraft's 
 - **Green** — normal aircraft
 - **Red** — two planes within 2km of each other (proximity alert)
 - **Yellow** — two planes within 5km of each other
-- **Blue** — military aircraft (identified by callsign prefix)
+- **Blue** — military aircraft (identified by ICAO hex range or callsign prefix)
 - **Flashing red ring** — emergency squawk code (7700/7600/7500)
 <br/><br/>
 
 > What are the different aircraft shapes?
 
 - **Chevron/arrow** — fixed-wing aircraft, points in direction of travel
-- **Circle** — helicopter/rotorcraft
+- **Circle** — helicopter/rotorcraft (detected by ADS-B category or callsign: SYS, HELIMED, SAR, Coastguard, etc.)
 - Size varies by altitude (low = bigger, high = smaller) if altitude sizing is enabled
+<br/><br/>
+
+> What unit options are available?
+
+- **Imperial** — mph, feet, miles on range rings
+- **Metric** — km/h, metres, km on range rings
+- **Aviation** — knots, flight levels (FL350), nautical miles on range rings
 <br/><br/>
 
 > How do I correct the screen orientation?
@@ -278,7 +285,27 @@ If north doesn't align with the top of your physical display, use the **Screen R
 
 > What's the expanding ring effect on the radar?
 
-When the radar sweep passes over an aircraft, a pulse ring expands outward from the plane — similar to a real radar phosphor display. This is purely cosmetic.
+When the radar sweep passes over an aircraft, a pulse ring expands outward from the plane — similar to a real radar phosphor display. This can be turned off in settings (Radar Ping).
+<br/><br/>
+
+> Where are the stats?
+
+Visit the web config page (http://microradar.local or the device's IP). Stats are shown at the top: total planes tracked, peak simultaneous count with time of day, military sightings, emergency squawks, and closest proximity pass. Stats reset on reboot.
+<br/><br/>
+
+> Some planes on FlightRadar24 don't show on the radar
+
+OpenSky relies on volunteer ADS-B receivers and has less coverage than FlightRadar24's proprietary network. Some aircraft that appear on FR24 simply aren't in OpenSky's data. This is a data source limitation, not a bug.
+<br/><br/>
+
+> The radar stopped showing planes overnight
+
+The device auto-reboots if memory runs low (heap fragmentation from long-running operation). This is normal — it takes a few seconds and planes reappear on the next fetch cycle. If planes don't return after a reboot, your OpenSky API credits may be exhausted (4000/day with authentication, resets daily).
+<br/><br/>
+
+> How often does the radar update?
+
+With OpenSky authentication: every ~22 seconds. Without: every ~3.6 minutes. Authenticated accounts get 4000 API credits per day — enough for continuous 22-second updates.
 
 ## Notes
 
