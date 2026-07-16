@@ -13,19 +13,24 @@
 
 > Fork of [AnthonySturdy/micro-radar](https://github.com/AnthonySturdy/micro-radar) with additional features:
 > - **Proximity coloring** — aircraft turn red (<2km) or yellow (<5km) when near each other
-> - **Military detection** — military aircraft shown in blue (RAF, NATO, USAF, etc.)
+> - **Military detection** — shown in blue via ICAO hex ranges (UK 43C block) and callsign prefixes (RAF, NATO, USAF, etc.)
+> - **Helicopter detection** — rotorcraft shown as circles, identified by ADS-B category or callsign (SYS, HELIMED, SAR, Coastguard)
 > - **Squawk alerts** — flashing red ring + label for emergency codes (7700/7600/7500)
-> - **Route display** — shows origin > destination airports (e.g. BCN>MAN) via adsb.lol
-> - **Helicopter icons** — rotorcraft shown as circles instead of arrows
-> - **Altitude-based sizing** — low planes appear bigger, cruising planes smaller
-> - **Radar sweep pulse** — expanding ring + chevron flash when sweep hits a plane
-> - **Compass rose** — N/S/E/W markers at screen edge
-> - **Range labels** — distance markers on radar rings (km or miles)
+> - **Route display** — shows origin > destination airports (e.g. BCN>MAN) via adsb.lol, with heading-based direction correction
+> - **Aviation units** — knots, flight levels (FL350), and nautical miles for a realistic radar feel
+> - **Configurable units** — Imperial (mph/ft), Metric (km/h/m), or Aviation (kt/FL/nm) via web settings
+> - **Stats dashboard** — web page shows: planes tracked, peak simultaneous (with time), military sightings, emergencies, closest proximity pass
+> - **Altitude-based sizing** — low planes appear bigger, cruising planes smaller (configurable)
+> - **Radar sweep pulse** — expanding ring + flash when sweep hits a plane (configurable)
+> - **Compass rose** — N/S/E/W markers at screen edge, rotates with screen rotation
+> - **Range labels** — distance markers on radar rings in km, miles, or nautical miles
 > - **Screen rotation** — configurable offset for physical mounting alignment
 > - **Background networking** — all HTTP runs in a FreeRTOS task, zero display freezes
+> - **NTP time sync** — real clock time from longitude-derived timezone
 > - **Longitude correction** — proper map proportions at any latitude
-> - **Configurable units** — Imperial (mph/ft) or Metric (km/h/m) via web settings
-> - **Improved triangles** — fixed rotation direction, deeper chevron shape
+> - **Rate limit handling** — gracefully handles 429 responses without losing tracked aircraft
+> - **Long-running stability** — stale route cleanup, auto-reboot on low heap
+> - **Improved triangles** — screen-space heading correction, deeper chevron shape
 
 ## Prerequisites
 
